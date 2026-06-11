@@ -31,6 +31,14 @@ No cloud. No git. No command line. Just your files, safely versioned, on your ow
 
 ---
 
+## Screenshots
+
+| Watched Folders dashboard | File timeline & snapshot history |
+|---|---|
+| ![Dashboard](docs/screenshot-dashboard.png) | ![Timeline](docs/screenshot-timeline.png) |
+
+---
+
 ## Why Was It Made?
 
 Every developer, writer, or power user has had this moment: you made a change, saved the file, and then realized the old version was exactly what you needed. You hit Ctrl+Z — too late, the session is gone. You check git — you never committed it. You look in Recycle Bin — nothing there.
