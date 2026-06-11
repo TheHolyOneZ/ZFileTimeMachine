@@ -291,43 +291,174 @@ App-wide options:
 
 ```
 ZFileTimeMachine/
-│
-├── src/                          # React frontend (TypeScript)
-│   ├── routes/                   # Page-level screens
-│   │   ├── Folders.tsx           # Main dashboard
-│   │   ├── FolderDetail.tsx      # File browser + timeline
-│   │   ├── FolderRecover.tsx     # Bulk recovery
-│   │   └── Settings.tsx          # Settings
-│   ├── components/               # Reusable UI pieces
-│   │   ├── Timeline.tsx          # Snapshot list + inline diffs
-│   │   ├── DiffViewer.tsx        # Line diff with search
-│   │   ├── RewindDialog.tsx      # Rewind confirmation
-│   │   ├── RecoverTree.tsx       # Checkbox file tree
-│   │   ├── FileList.tsx          # File browser rows
-│   │   ├── ActivityFeed.tsx      # Live event log
-│   │   ├── CommandPalette.tsx    # Cmd+K launcher
-│   │   └── ...
-│   ├── hooks/                    # React Query data hooks
-│   └── lib/                      # Types, Tauri command wrappers, events
-│
-├── src-tauri/                    # Rust backend (Tauri 2)
-│   └── src/
-│       ├── commands/             # Tauri command handlers
-│       │   ├── folders.rs        # Folder CRUD
-│       │   ├── snapshots.rs      # Snapshot creation & garbage collection
-│       │   ├── rewind.rs         # Single-file restore
-│       │   ├── recover.rs        # Bulk recovery
-│       │   ├── notes.rs          # Note management
-│       │   └── dev.rs            # QA test suite
-│       ├── watcher/              # File system monitoring
-│       │   └── supervisor.rs     # Per-folder watcher thread manager
-│       ├── db/                   # SQLite layer
-│       │   └── repo.rs           # All database read/write operations
-│       ├── store/
-│       │   └── cas.rs            # Content-addressed deduplicated blob store
-│       └── snapshot/             # SHA-256 hashing, binary detection, retention
-│
-└── package.json / Cargo.toml     # Dependency manifests
+├── src/
+│   ├── assets/
+│   │   └── logo.png
+│   ├── components/
+│   │   ├── ActivityFeed.tsx
+│   │   ├── AddFolderDialog.tsx
+│   │   ├── CommandPalette.tsx
+│   │   ├── ContextMenu.tsx
+│   │   ├── DateTimePicker.tsx
+│   │   ├── DevPanel.tsx
+│   │   ├── DiffViewer.tsx
+│   │   ├── ErrorBoundary.tsx
+│   │   ├── FileList.tsx
+│   │   ├── FolderBrowser.tsx
+│   │   ├── FolderCard.tsx
+│   │   ├── FolderIcon.tsx
+│   │   ├── IgnoreRulesEditor.tsx
+│   │   ├── InfoTooltip.tsx
+│   │   ├── KeyboardShortcuts.tsx
+│   │   ├── NoteEditor.tsx
+│   │   ├── OnboardingModal.tsx
+│   │   ├── RecoverConfirmDialog.tsx
+│   │   ├── RecoverTree.tsx
+│   │   ├── RewindDialog.tsx
+│   │   ├── ScanProgress.tsx
+│   │   ├── Timeline.tsx
+│   │   └── TristateCheckbox.tsx
+│   ├── context/
+│   │   ├── OnboardingContext.tsx
+│   │   └── ToastContext.tsx
+│   ├── hooks/
+│   │   ├── useContextMenu.ts
+│   │   ├── useFolders.ts
+│   │   ├── useLiveEvents.ts
+│   │   ├── useOnboarding.ts
+│   │   └── useTimeline.ts
+│   ├── lib/
+│   │   ├── events.ts
+│   │   ├── folderAppearance.ts
+│   │   ├── popup.ts
+│   │   ├── tauri.ts
+│   │   └── types.ts
+│   ├── routes/
+│   │   ├── About.tsx
+│   │   ├── FolderDetail.tsx
+│   │   ├── FolderRecover.tsx
+│   │   ├── Folders.tsx
+│   │   └── Settings.tsx
+│   ├── App.tsx
+│   ├── index.css
+│   ├── main.tsx
+│   └── vite-env.d.ts
+├── src-tauri/
+│   ├── capabilities/
+│   │   └── default.json
+│   ├── icons/
+│   │   ├── android/
+│   │   │   ├── mipmap-anydpi-v26/
+│   │   │   │   └── ic_launcher.xml
+│   │   │   ├── mipmap-hdpi/
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   ├── ic_launcher_round.png
+│   │   │   │   └── ic_launcher.png
+│   │   │   ├── mipmap-mdpi/
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   ├── ic_launcher_round.png
+│   │   │   │   └── ic_launcher.png
+│   │   │   ├── mipmap-xhdpi/
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   ├── ic_launcher_round.png
+│   │   │   │   └── ic_launcher.png
+│   │   │   ├── mipmap-xxhdpi/
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   ├── ic_launcher_round.png
+│   │   │   │   └── ic_launcher.png
+│   │   │   ├── mipmap-xxxhdpi/
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   ├── ic_launcher_round.png
+│   │   │   │   └── ic_launcher.png
+│   │   │   └── values/
+│   │   │       └── ic_launcher_background.xml
+│   │   ├── ios/
+│   │   │   ├── AppIcon-20x20@1x.png
+│   │   │   ├── AppIcon-20x20@2x-1.png
+│   │   │   ├── AppIcon-20x20@2x.png
+│   │   │   ├── AppIcon-20x20@3x.png
+│   │   │   ├── AppIcon-29x29@1x.png
+│   │   │   ├── AppIcon-29x29@2x-1.png
+│   │   │   ├── AppIcon-29x29@2x.png
+│   │   │   ├── AppIcon-29x29@3x.png
+│   │   │   ├── AppIcon-40x40@1x.png
+│   │   │   ├── AppIcon-40x40@2x-1.png
+│   │   │   ├── AppIcon-40x40@2x.png
+│   │   │   ├── AppIcon-40x40@3x.png
+│   │   │   ├── AppIcon-512@2x.png
+│   │   │   ├── AppIcon-60x60@2x.png
+│   │   │   ├── AppIcon-60x60@3x.png
+│   │   │   ├── AppIcon-76x76@1x.png
+│   │   │   ├── AppIcon-76x76@2x.png
+│   │   │   └── AppIcon-83.5x83.5@2x.png
+│   │   ├── 128x128.png
+│   │   ├── 128x128@2x.png
+│   │   ├── 32x32.png
+│   │   ├── 64x64.png
+│   │   ├── icon.icns
+│   │   ├── icon.ico
+│   │   ├── icon.png
+│   │   ├── Square107x107Logo.png
+│   │   ├── Square142x142Logo.png
+│   │   ├── Square150x150Logo.png
+│   │   ├── Square284x284Logo.png
+│   │   ├── Square30x30Logo.png
+│   │   ├── Square310x310Logo.png
+│   │   ├── Square44x44Logo.png
+│   │   ├── Square71x71Logo.png
+│   │   ├── Square89x89Logo.png
+│   │   └── StoreLogo.png
+│   ├── src/
+│   │   ├── commands/
+│   │   │   ├── dev.rs
+│   │   │   ├── folders.rs
+│   │   │   ├── mod.rs
+│   │   │   ├── notes.rs
+│   │   │   ├── recover.rs
+│   │   │   ├── rewind.rs
+│   │   │   ├── settings.rs
+│   │   │   └── snapshots.rs
+│   │   ├── db/
+│   │   │   ├── migrations.rs
+│   │   │   ├── mod.rs
+│   │   │   ├── repo.rs
+│   │   │   └── schema.sql
+│   │   ├── snapshot/
+│   │   │   ├── binary.rs
+│   │   │   ├── hasher.rs
+│   │   │   ├── mod.rs
+│   │   │   └── retention.rs
+│   │   ├── store/
+│   │   │   ├── cas.rs
+│   │   │   └── mod.rs
+│   │   ├── util/
+│   │   │   ├── fs.rs
+│   │   │   └── mod.rs
+│   │   ├── watcher/
+│   │   │   ├── debounce.rs
+│   │   │   ├── ignore.rs
+│   │   │   ├── mod.rs
+│   │   │   └── supervisor.rs
+│   │   ├── config.rs
+│   │   ├── diff.rs
+│   │   ├── error.rs
+│   │   ├── events.rs
+│   │   ├── lib.rs
+│   │   ├── main.rs
+│   │   └── rename.rs
+│   ├── build.rs
+│   ├── Cargo.lock
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+├── index.html
+├── package.json
+├── pnpm-lock.yaml
+├── postcss.config.js
+├── README.md
+├── tailwind.config.ts
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.ts
 ```
 
 ---
