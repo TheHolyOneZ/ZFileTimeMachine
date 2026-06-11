@@ -1,0 +1,67 @@
+[package]
+name = "zfiletimemachine"
+version = "0.0.1"
+description = "A local-first file version history tool"
+authors = []
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "zfiletimemachine_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-autostart = "2"
+
+# File watching
+notify = "6"
+notify-debouncer-full = "0.3"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Hashing
+sha2 = "0.10"
+hex = "0.4"
+
+# Diffing
+similar = { version = "2", features = ["text"] }
+
+# Ignore patterns (gitignore-style)
+ignore = "0.4"
+
+# Concurrency
+dashmap = "6"
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "1"
+
+# Platform data directories
+directories = "5"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Compression (Feature 8)
+zstd = "0.13"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
