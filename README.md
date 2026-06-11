@@ -512,7 +512,7 @@ pnpm tauri build
 
 ---
 
-## Keyboard Shortcuts
+## Keyboard Shortcuts (Still in work) 
 
 | Shortcut | Action |
 |---|---|
