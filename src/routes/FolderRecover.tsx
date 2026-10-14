@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
@@ -72,7 +73,7 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
   return (
     <div className="flex flex-col h-full">
 
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/6 shrink-0">
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-foreground/6 shrink-0">
         <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
           <FileText size={13} className="text-primary/70" />
         </div>
@@ -80,13 +81,13 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
           <p className="text-xs font-semibold text-foreground/90 truncate font-mono">
             {file.relPath.split('/').pop()}
           </p>
-          <p className="text-[10px] text-muted-foreground/40 font-mono truncate">
+          <p className="text-[10px] text-muted-foreground/70 font-mono truncate">
             {file.relPath}
           </p>
         </div>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-white/6 text-muted-foreground/40 hover:text-foreground transition-all"
+          className="p-1.5 rounded-lg hover:bg-foreground/6 text-muted-foreground/70 hover:text-foreground transition-all"
         >
           <X size={13} />
         </button>
@@ -115,7 +116,7 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
             className={`px-2 py-1 rounded-lg text-[10px] font-medium border transition-all
                         ${src === f
                           ? 'bg-primary/15 border-primary/30 text-primary'
-                          : 'border-transparent text-muted-foreground/40 hover:text-foreground/70 hover:bg-white/5'
+                          : 'border-transparent text-muted-foreground/70 hover:text-foreground/70 hover:bg-foreground/5'
                         }`}
           >
             {f === 'all' ? `All ${snaps.length}` : SOURCE_LABEL[f]}
@@ -126,11 +127,11 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
 
       <div className="flex-1 min-h-0 overflow-auto px-3 py-2 space-y-1">
         {isLoading ? (
-          <div className="flex items-center justify-center h-24 gap-2 text-xs text-muted-foreground/30">
+          <div className="flex items-center justify-center h-24 gap-2 text-xs text-muted-foreground/60">
             <Loader2 size={13} className="animate-spin" /> Loading…
           </div>
         ) : list.length === 0 ? (
-          <div className="flex items-center justify-center h-24 text-xs text-muted-foreground/25">
+          <div className="flex items-center justify-center h-24 text-xs text-muted-foreground/50">
             No snapshots match.
           </div>
         ) : list.map((snap, idx) => {
@@ -143,7 +144,7 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all group
                           ${active
                             ? 'bg-amber-400/8 border-amber-400/25 shadow-[inset_0_1px_0_rgba(251,191,36,0.08)]'
-                            : 'bg-white/2 border-white/5 hover:bg-white/5 hover:border-white/10'
+                            : 'bg-foreground/2 border-foreground/5 hover:bg-foreground/5 hover:border-foreground/10'
                           }`}
             >
               <div className="flex-1 min-w-0 space-y-1">
@@ -158,12 +159,12 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium ${SOURCE_COLOR[snap.source] ?? 'text-muted-foreground/40 bg-white/5 border-white/10'}`}>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium ${SOURCE_COLOR[snap.source] ?? 'text-muted-foreground/70 bg-foreground/5 border-foreground/10'}`}>
                     {SOURCE_LABEL[snap.source] ?? snap.source}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/40 font-mono">{fmtBytes(snap.sizeBytes)}</span>
+                  <span className="text-[10px] text-muted-foreground/70 font-mono">{fmtBytes(snap.sizeBytes)}</span>
                   {snap.deltaBytes !== snap.sizeBytes && (
-                    <span className="text-[10px] text-muted-foreground/25 font-mono">Δ{fmtBytes(snap.deltaBytes)}</span>
+                    <span className="text-[10px] text-muted-foreground/50 font-mono">Δ{fmtBytes(snap.deltaBytes)}</span>
                   )}
                 </div>
               </div>
@@ -173,8 +174,8 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
         })}
       </div>
 
-      <div className="px-3 pb-3 pt-1 shrink-0 border-t border-white/5 mt-1">
-        <p className="text-[10px] text-muted-foreground/25 leading-relaxed">
+      <div className="px-3 pb-3 pt-1 shrink-0 border-t border-foreground/5 mt-1">
+        <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
           Pinned files recover to this exact snapshot, ignoring the global snapshot point.
         </p>
       </div>
@@ -392,29 +393,29 @@ export function FolderRecover() {
     <div className="flex flex-col flex-1 h-full overflow-hidden bg-background">
 
 
-      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/6 shrink-0 bg-gradient-to-r from-card/80 to-card/40 backdrop-blur-sm">
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border/70 shrink-0">
         <button
           onClick={() => navigate(`/folder/${folderId}`)}
-          className="p-1.5 rounded-lg bg-white/4 hover:bg-white/8 text-muted-foreground/60 hover:text-foreground transition-all border border-white/5"
+          className="p-1.5 rounded-lg bg-foreground/4 hover:bg-foreground/8 text-muted-foreground/60 hover:text-foreground transition-all border border-foreground/5"
         >
           <ArrowLeft size={14} />
         </button>
 
-        <div className="w-8 h-8 rounded-xl bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0 shadow-[0_0_12px_hsl(217_91%_60%/0.15)]">
+        <div className="w-8 h-8 rounded-xl bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0">
           <History size={15} className="text-primary/80" />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-sm font-semibold text-foreground/90">Recover</h1>
-            <span className="text-muted-foreground/30">·</span>
+            <span className="text-muted-foreground/60">·</span>
             <span className="text-sm text-muted-foreground/60 truncate">{folder?.displayName ?? '…'}</span>
           </div>
-          <p className="text-[11px] text-muted-foreground/35 font-mono truncate mt-0.5">{folder?.path ?? ''}</p>
+          <p className="text-[11px] text-muted-foreground/60 font-mono truncate mt-0.5">{folder?.path ?? ''}</p>
         </div>
 
         {pinnedCount > 0 && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/20 shadow-[0_0_8px_rgba(251,191,36,0.1)]">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/20">
             <Pin size={10} className="text-amber-400 fill-amber-400/60" />
             <span className="text-[11px] text-amber-400/90 font-medium">{pinnedCount} pinned</span>
           </div>
@@ -433,21 +434,21 @@ export function FolderRecover() {
       <div className="absolute inset-0 flex overflow-hidden">
 
 
-        <div className="flex flex-col w-[54%] min-w-0 border-r border-white/6 overflow-hidden">
+        <div className="flex flex-col w-[54%] min-w-0 border-r border-foreground/6 overflow-hidden">
 
 
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/4 shrink-0 bg-white/1">
-            <div className="flex items-center gap-1.5 flex-1 bg-white/4 rounded-xl px-3 py-1.5 border border-white/6 focus-within:border-primary/30 focus-within:bg-primary/5 transition-all">
-              <Search size={11} className="text-muted-foreground/35 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-foreground/4 shrink-0 bg-foreground/1">
+            <div className="flex items-center gap-1.5 flex-1 bg-foreground/4 rounded-xl px-3 py-1.5 border border-foreground/6 focus-within:border-primary/30 focus-within:bg-primary/5 transition-all">
+              <Search size={11} className="text-muted-foreground/60 shrink-0" />
               <input
                 type="text"
                 placeholder="Filter files…"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/25 focus:outline-none"
+                className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
               />
               {filter && (
-                <button onClick={() => setFilter('')} className="text-muted-foreground/30 hover:text-muted-foreground transition-colors">
+                <button onClick={() => setFilter('')} className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
                   <X size={11} />
                 </button>
               )}
@@ -460,7 +461,7 @@ export function FolderRecover() {
             </button>
             <button
               onClick={clearSel}
-              className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white/4 border border-white/8 text-muted-foreground/50 hover:bg-white/8 hover:text-foreground transition-all"
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-foreground/4 border border-foreground/8 text-muted-foreground/50 hover:bg-foreground/8 hover:text-foreground transition-all"
             >
               None
             </button>
@@ -469,7 +470,7 @@ export function FolderRecover() {
 
           <div className="flex-1 overflow-auto p-2">
             {isLoading ? (
-              <div className="flex items-center justify-center h-32 gap-2 text-xs text-muted-foreground/30">
+              <div className="flex items-center justify-center h-32 gap-2 text-xs text-muted-foreground/60">
                 <Loader2 size={14} className="animate-spin" /> Loading…
               </div>
             ) : (
@@ -487,8 +488,8 @@ export function FolderRecover() {
           </div>
 
 
-          <div className="px-3 py-2 border-t border-white/4 shrink-0">
-            <p className="text-[10px] text-muted-foreground/25">
+          <div className="px-3 py-2 border-t border-foreground/4 shrink-0">
+            <p className="text-[10px] text-muted-foreground/50">
               Click a filename to view its snapshot history and pin a specific version.
             </p>
           </div>
@@ -511,9 +512,8 @@ export function FolderRecover() {
                 <div className="mx-4 mt-4 flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-amber-400/6 border border-amber-400/18">
                   <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />
                   <p className="text-[11px] text-amber-300/75 leading-relaxed">
-                    <strong className="font-semibold text-amber-300/90">OnChange mode active.</strong>{' '}
-                    "Latest" = your last save, which may be the broken version.
-                    Click any file to browse its history and pin a safe snapshot.
+                    <strong className="font-semibold text-amber-300/90">"Latest" is your most recent save</strong>, which
+                    may be the broken version. Click a file to pick an earlier snapshot for it.
                   </p>
                 </div>
               )}
@@ -522,7 +522,7 @@ export function FolderRecover() {
 
 
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest mb-2.5">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2.5">
                     Recovery mode
                   </p>
                   <div className="grid grid-cols-2 gap-2">
@@ -536,20 +536,20 @@ export function FolderRecover() {
                         className={`flex flex-col gap-1.5 items-start px-3.5 py-3 rounded-xl border text-left transition-all
                                     ${mode === k
                                       ? accent === 'red'
-                                        ? 'bg-red-500/10 border-red-500/30 shadow-[0_0_12px_rgba(239,68,68,0.08)]'
-                                        : 'bg-primary/10 border-primary/30 shadow-[0_0_12px_hsl(217_91%_60%/0.1)]'
-                                      : 'bg-white/2 border-white/6 hover:bg-white/5 hover:border-white/12'
+                                        ? 'bg-red-500/10 border-red-500/30'
+                                        : 'bg-primary/10 border-primary/30'
+                                      : 'bg-foreground/2 border-foreground/6 hover:bg-foreground/5 hover:border-foreground/12'
                                     }`}
                       >
                         <Icon size={15} className={mode === k
                           ? accent === 'red' ? 'text-red-400' : 'text-primary'
-                          : 'text-muted-foreground/40'}
+                          : 'text-muted-foreground/70'}
                         />
                         <div>
                           <p className={`text-xs font-semibold ${mode === k ? (accent === 'red' ? 'text-red-400' : 'text-primary') : 'text-foreground/70'}`}>
                             {label}
                           </p>
-                          <p className={`text-[10px] ${mode === k ? (accent === 'red' ? 'text-red-400/50' : 'text-primary/50') : 'text-muted-foreground/35'}`}>
+                          <p className={`text-[10px] ${mode === k ? (accent === 'red' ? 'text-red-400/50' : 'text-primary/50') : 'text-muted-foreground/60'}`}>
                             {sub}
                           </p>
                         </div>
@@ -561,19 +561,19 @@ export function FolderRecover() {
 
                 {mode === 'export' && (
                   <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest mb-2.5">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2.5">
                       Destination
                     </p>
                     <div className="flex gap-2">
                       <div
-                        className="flex-1 px-3 py-2.5 rounded-xl bg-white/3 border border-white/8 text-[11px] font-mono text-foreground/50 truncate"
+                        className="flex-1 px-3 py-2.5 rounded-xl bg-foreground/3 border border-foreground/8 text-[11px] font-mono text-foreground/50 truncate"
                         title={dest}
                       >
-                        {dest || <span className="text-muted-foreground/25">No folder selected</span>}
+                        {dest || <span className="text-muted-foreground/50">No folder selected</span>}
                       </div>
                       <button
                         onClick={() => void (async () => { const p = await pickFolder(); if (p) setDest(p); })()}
-                        className="px-3 py-2.5 rounded-xl border border-white/10 bg-white/4 hover:bg-white/8 text-muted-foreground/50 hover:text-foreground transition-all"
+                        className="px-3 py-2.5 rounded-xl border border-foreground/10 bg-foreground/4 hover:bg-foreground/8 text-muted-foreground/50 hover:text-foreground transition-all"
                       >
                         <FolderOpen size={13} />
                       </button>
@@ -584,7 +584,7 @@ export function FolderRecover() {
 
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
-                    <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest">
+                    <p className="text-xs font-semibold text-muted-foreground">
                       Snapshot point
                     </p>
                     {pinnedCount > 0 && (
@@ -595,10 +595,10 @@ export function FolderRecover() {
                   </div>
 
 
-                  <div className="flex p-1 rounded-xl bg-white/3 border border-white/6 gap-0.5">
+                  <div className="flex p-1 rounded-xl bg-foreground/3 border border-foreground/6 gap-0.5">
                     {([
                       { k: 'latest',        label: 'Latest' },
-                      { k: 'nthFromLatest', label: 'N ago'  },
+                      { k: 'nthFromLatest', label: 'Versions back' },
                       { k: 'asOf',          label: 'As of'  },
                     ] as const).map(({ k, label }) => (
                       <button
@@ -607,7 +607,7 @@ export function FolderRecover() {
                         className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-all
                                     ${snapKind === k
                                       ? 'bg-primary/20 text-primary shadow-sm border border-primary/25'
-                                      : 'text-muted-foreground/40 hover:text-foreground/70'
+                                      : 'text-muted-foreground/70 hover:text-foreground/70'
                                     }`}
                       >
                         {label}
@@ -626,14 +626,14 @@ export function FolderRecover() {
                             className={`px-3 py-1.5 rounded-lg border text-[11px] font-mono font-medium transition-all
                                         ${nthOffset === n
                                           ? 'bg-primary/15 border-primary/30 text-primary'
-                                          : 'bg-white/3 border-white/8 text-muted-foreground/50 hover:border-white/15 hover:text-foreground/70'
+                                          : 'bg-foreground/3 border-foreground/8 text-muted-foreground/50 hover:border-foreground/15 hover:text-foreground/70'
                                         }`}
                           >
                             ←{n}
                           </button>
                         ))}
                         <div className="flex items-center gap-1.5 ml-auto">
-                          <span className="text-[10px] text-muted-foreground/35">custom</span>
+                          <span className="text-[10px] text-muted-foreground/60">custom</span>
                           <input
                             type="number" min={1} max={9999}
                             value={nthOffset}
@@ -642,9 +642,9 @@ export function FolderRecover() {
                           />
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-white/2 border border-white/5">
-                        <Info size={10} className="text-muted-foreground/30 shrink-0" />
-                        <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+                      <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-foreground/2 border border-foreground/5">
+                        <Info size={10} className="text-muted-foreground/60 shrink-0" />
+                        <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
                           Each file goes back{' '}
                           <strong className="text-foreground/60">
                             {nthOffset} save{nthOffset !== 1 ? 's' : ''}
@@ -707,7 +707,7 @@ export function FolderRecover() {
 
 
                       <div>
-                        <p className="text-[10px] text-muted-foreground/40 mb-1.5 flex items-center gap-1">
+                        <p className="text-[10px] text-muted-foreground/70 mb-1.5 flex items-center gap-1">
                           <Clock size={9} /> Snapshot direction
                         </p>
                         <div className="grid grid-cols-3 gap-1.5">
@@ -738,7 +738,7 @@ export function FolderRecover() {
                               className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl border text-center transition-all
                                           ${snapPreference === k
                                             ? 'bg-primary/15 border-primary/30 text-primary'
-                                            : 'bg-white/2 border-white/6 text-muted-foreground/40 hover:bg-white/5 hover:text-foreground/70'
+                                            : 'bg-foreground/2 border-foreground/6 text-muted-foreground/70 hover:bg-foreground/5 hover:text-foreground/70'
                                           }`}
                             >
                               <span className="text-[13px] font-mono font-bold leading-none">{icon}</span>
@@ -746,7 +746,7 @@ export function FolderRecover() {
                             </button>
                           ))}
                         </div>
-                        <p className="text-[10px] text-muted-foreground/30 mt-1.5 leading-relaxed">
+                        <p className="text-[10px] text-muted-foreground/60 mt-1.5 leading-relaxed">
                           {snapPreference === 'before'
                             ? 'Safe default. Gets the state just before your chosen time — you always recover a known past version.'
                             : snapPreference === 'after'
@@ -757,9 +757,9 @@ export function FolderRecover() {
 
 
                       <div>
-                        <p className="text-[10px] text-muted-foreground/40 mb-1.5 flex items-center gap-1">
+                        <p className="text-[10px] text-muted-foreground/70 mb-1.5 flex items-center gap-1">
                           <AlertCircle size={9} /> Tolerance window
-                          <span className="text-muted-foreground/25 ml-0.5">(optional)</span>
+                          <span className="text-muted-foreground/50 ml-0.5">(optional)</span>
                         </p>
                         <div className="flex gap-1.5 flex-wrap">
                           {([
@@ -774,7 +774,7 @@ export function FolderRecover() {
                               className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-medium transition-all
                                           ${toleranceMs === value
                                             ? 'bg-primary/15 border-primary/30 text-primary'
-                                            : 'bg-white/2 border-white/6 text-muted-foreground/40 hover:text-foreground/70 hover:bg-white/5'
+                                            : 'bg-foreground/2 border-foreground/6 text-muted-foreground/70 hover:text-foreground/70 hover:bg-foreground/5'
                                           }`}
                             >
                               {label}
@@ -782,7 +782,7 @@ export function FolderRecover() {
                           ))}
                         </div>
                         {toleranceMs !== null && (
-                          <p className="text-[10px] text-muted-foreground/30 mt-1.5">
+                          <p className="text-[10px] text-muted-foreground/60 mt-1.5">
                             Files with no snapshot within{' '}
                             <strong className="text-foreground/50">
                               {toleranceMs >= 86_400_000
@@ -803,7 +803,7 @@ export function FolderRecover() {
                                         }`}>
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] text-muted-foreground/50 font-medium">
-                              Coverage{!asOfCoverage.exact && <span className="text-muted-foreground/30"> (estimate)</span>}
+                              Coverage{!asOfCoverage.exact && <span className="text-muted-foreground/60"> (estimate)</span>}
                             </span>
                             <span className={`text-[11px] font-semibold font-mono
                                             ${asOfCoverage.skipped === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
@@ -849,7 +849,7 @@ export function FolderRecover() {
                           )}
 
                           {(!asOfCoverage.exact || asOfCoverage.skipped > 0) && (
-                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground/25 border-t border-white/4 pt-1.5 mt-0.5">
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground/50 border-t border-foreground/4 pt-1.5 mt-0.5">
                               <Eye size={9} />
                               <span>Hit <strong className="text-foreground/35">Preview</strong> for exact per-file results before recovering.</span>
                             </div>
@@ -867,7 +867,7 @@ export function FolderRecover() {
                         />
                         <div className="relative w-8 h-[18px] rounded-full border border-border bg-secondary/60
                                         peer-checked:bg-primary peer-checked:border-primary transition-colors shrink-0">
-                          <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white/50
+                          <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-foreground/50
                                           peer-checked:translate-x-3.5 peer-checked:bg-white
                                           transition-transform shadow-sm" />
                         </div>
@@ -883,7 +883,7 @@ export function FolderRecover() {
                 <div>
                   <button
                     onClick={() => setShowIgnore((v) => !v)}
-                    className="flex items-center gap-2 w-full text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest hover:text-muted-foreground/70 transition-colors"
+                    className="flex items-center gap-2 w-full text-xs font-semibold text-muted-foreground hover:text-muted-foreground transition-colors"
                   >
                     Ignore patterns
                     <ChevronDown size={11} className={`ml-auto transition-transform ${showIgnore ? 'rotate-180' : ''}`} />
@@ -899,7 +899,7 @@ export function FolderRecover() {
                                    font-mono text-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30
                                    resize-none leading-relaxed focus:border-primary/30 transition-all"
                       />
-                      <p className="text-[10px] text-muted-foreground/30 mt-1.5">One per line, gitignore syntax.</p>
+                      <p className="text-[10px] text-muted-foreground/60 mt-1.5">One per line, gitignore syntax.</p>
                     </div>
                   )}
                 </div>
@@ -909,19 +909,19 @@ export function FolderRecover() {
 
 
                 {running && progress && (
-                  <div className="rounded-xl border border-white/8 bg-white/2 p-3.5">
+                  <div className="rounded-xl border border-foreground/8 bg-foreground/2 p-3.5">
                     <div className="flex items-center justify-between text-[11px] mb-2">
                       <span className="text-muted-foreground/50 font-mono">{progress.processed}/{progress.total}</span>
                       <span className="text-primary/60 font-medium">{progressPct}%</span>
                     </div>
-                    <div className="w-full h-1 bg-white/6 rounded-full overflow-hidden">
+                    <div className="w-full h-1 bg-foreground/6 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-primary/80 to-primary rounded-full transition-all duration-300"
                         style={{ width: `${progressPct}%` }}
                       />
                     </div>
                     {progress.currentPath && (
-                      <p className="text-[10px] font-mono text-muted-foreground/30 mt-2 truncate">{progress.currentPath}</p>
+                      <p className="text-[10px] font-mono text-muted-foreground/60 mt-2 truncate">{progress.currentPath}</p>
                     )}
                   </div>
                 )}
@@ -933,7 +933,7 @@ export function FolderRecover() {
       </div>
 
 
-      <div className="flex items-center gap-3 px-5 py-3.5 border-t border-white/6 shrink-0 bg-gradient-to-r from-card/60 to-card/30">
+      <div className="flex items-center gap-3 px-5 py-3.5 border-t border-border/70 shrink-0 bg-chrome/40">
 
         <div className="flex-1 min-w-0">
           {selected.size > 0 ? (
@@ -945,13 +945,13 @@ export function FolderRecover() {
                 </span>
               )}
               {dateRange && (
-                <span className="text-[11px] text-muted-foreground/35 font-mono">
+                <span className="text-[11px] text-muted-foreground/60 font-mono">
                   {fmt(dateRange.min)} → {fmt(dateRange.max)}
                 </span>
               )}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground/25">Select files from the tree to recover</p>
+            <p className="text-xs text-muted-foreground/50">Select files from the tree to recover</p>
           )}
         </div>
 
@@ -959,8 +959,8 @@ export function FolderRecover() {
         <button
           onClick={() => void runRecover({ ...buildArgs(), dryRun: true })}
           disabled={selected.size === 0 || running}
-          className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] rounded-xl border border-white/10
-                     bg-white/4 text-foreground/60 hover:bg-white/8 hover:text-foreground hover:border-white/18
+          className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] rounded-xl border border-foreground/10
+                     bg-foreground/4 text-foreground/60 hover:bg-foreground/8 hover:text-foreground hover:border-foreground/18
                      disabled:opacity-25 disabled:cursor-not-allowed transition-all"
         >
           <Eye size={13} />
@@ -979,8 +979,8 @@ export function FolderRecover() {
           className={`flex items-center gap-2 px-4 py-2 text-[12px] rounded-xl font-semibold transition-all
                       disabled:opacity-25 disabled:cursor-not-allowed
                       ${mode === 'restore'
-                        ? 'bg-red-500 text-white hover:bg-red-600 shadow-[0_0_16px_rgba(239,68,68,0.3)] hover:shadow-[0_0_24px_rgba(239,68,68,0.4)]'
-                        : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_16px_hsl(217_91%_60%/0.35)] hover:shadow-[0_0_24px_hsl(217_91%_60%/0.45)]'
+                        ? 'bg-red-500 text-white hover:bg-red-600'
+                        : 'bg-primary text-primary-foreground shadow-button hover:bg-primary/90'
                       }`}
         >
           {running
@@ -1047,10 +1047,10 @@ function ResultPanel({ result }: { result: BulkRecoverResult }) {
           <span className="text-amber-400/60 text-[10px]">{result.skipped} skipped (conflict)</span>
         )}
         {!result.dryRun && (
-          <span className="text-muted-foreground/40 ml-auto font-mono">{fmtBytes(result.bytesWritten)}</span>
+          <span className="text-muted-foreground/70 ml-auto font-mono">{fmtBytes(result.bytesWritten)}</span>
         )}
         {result.dryRun && (
-          <span className="text-muted-foreground/35 ml-auto text-[10px]">dry run</span>
+          <span className="text-muted-foreground/60 ml-auto text-[10px]">dry run</span>
         )}
       </div>
 
@@ -1096,12 +1096,12 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
   const skipped = result.preview?.filter((p) => !!p.skipReason) ?? result.failed.map((f) => ({ relPath: f.relPath, skipReason: f.error, snapshotAt: null, snapshotSource: null, sizeBytes: null }));
   const [tab, setTab] = useState<'covered' | 'skipped'>('covered');
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-      <div className="w-full max-w-xl bg-card border border-white/10 rounded-2xl shadow-2xl animate-fade-in flex flex-col max-h-[82vh]">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4">
+      <div className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-overlay animate-fade-in flex flex-col max-h-[82vh]">
 
 
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/6 shrink-0">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-foreground/6 shrink-0">
           <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Eye size={15} className="text-primary" />
           </div>
@@ -1114,7 +1114,7 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
               )}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/6 text-muted-foreground/40 hover:text-foreground transition-all">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-foreground/6 text-muted-foreground/70 hover:text-foreground transition-all">
             <X size={13} />
           </button>
         </div>
@@ -1124,7 +1124,7 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
           <button
             onClick={() => setTab('covered')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all
-                        ${tab === 'covered' ? 'bg-emerald-500/12 text-emerald-400 border border-emerald-500/20' : 'text-muted-foreground/40 hover:text-foreground/60'}`}
+                        ${tab === 'covered' ? 'bg-emerald-500/12 text-emerald-400 border border-emerald-500/20' : 'text-muted-foreground/70 hover:text-foreground/60'}`}
           >
             <CheckCircle2 size={11} />
             Would recover ({covered.length})
@@ -1133,7 +1133,7 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
             <button
               onClick={() => setTab('skipped')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all
-                          ${tab === 'skipped' ? 'bg-red-500/10 text-red-400 border border-red-500/18' : 'text-muted-foreground/40 hover:text-foreground/60'}`}
+                          ${tab === 'skipped' ? 'bg-red-500/10 text-red-400 border border-red-500/18' : 'text-muted-foreground/70 hover:text-foreground/60'}`}
             >
               <XCircle size={11} />
               Would skip ({skipped.length})
@@ -1144,7 +1144,7 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
 
         <div className="flex-1 overflow-auto px-4 py-3 space-y-1">
           {tab === 'covered' && covered.length === 0 && (
-            <div className="flex items-center justify-center h-24 text-xs text-muted-foreground/25">
+            <div className="flex items-center justify-center h-24 text-xs text-muted-foreground/50">
               No files would be recovered with these settings.
             </div>
           )}
@@ -1156,20 +1156,20 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
               </span>
               <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                 {item.snapshotSource && (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium ${SOURCE_COLOR[item.snapshotSource] ?? 'text-muted-foreground/40 bg-white/5 border-white/10'}`}>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium ${SOURCE_COLOR[item.snapshotSource] ?? 'text-muted-foreground/70 bg-foreground/5 border-foreground/10'}`}>
                     {SOURCE_LABEL[item.snapshotSource] ?? item.snapshotSource}
                   </span>
                 )}
                 {item.snapshotAt && (
-                  <span className="text-[10px] font-mono text-muted-foreground/40">{fmt(item.snapshotAt)}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground/70">{fmt(item.snapshotAt)}</span>
                 )}
                 {item.sizeBytes != null && (
-                  <span className="text-[10px] font-mono text-muted-foreground/30">{fmtBytes(item.sizeBytes)}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground/60">{fmtBytes(item.sizeBytes)}</span>
                 )}
               </div>
 
               {item.snapshotAt && (
-                <span className="text-[10px] font-mono text-muted-foreground/35 shrink-0 group-hover:hidden">
+                <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 group-hover:hidden">
                   {fmt(item.snapshotAt)}
                 </span>
               )}
@@ -1189,10 +1189,10 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
         </div>
 
 
-        <div className="flex items-center gap-2 px-5 py-4 border-t border-white/6 shrink-0">
+        <div className="flex items-center gap-2 px-5 py-4 border-t border-foreground/6 shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-white/8 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+            className="px-4 py-2.5 rounded-xl border border-foreground/8 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
           >
             Cancel
           </button>
@@ -1207,8 +1207,8 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
               onClick={onConfirm}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all
                           ${mode === 'restore'
-                            ? 'bg-red-500 text-white hover:bg-red-600 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
-                            : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_12px_hsl(217_91%_60%/0.3)]'
+                            ? 'bg-red-500 text-white hover:bg-red-600'
+                            : 'bg-primary text-primary-foreground shadow-button hover:bg-primary/90'
                           }`}
             >
               {mode === 'restore' ? <RotateCcw size={13} /> : <FolderDown size={13} />}
@@ -1217,7 +1217,8 @@ function PreviewModal({ result, mode, onClose, onConfirm }: {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1228,9 +1229,9 @@ function ConflictDialog({ conflicts, onOverwrite, onSkip, onCancel }: {
   onSkip: () => void;
   onCancel: () => void;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-md mx-4 bg-card border border-white/10 rounded-2xl shadow-2xl p-6 animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+      <div className="w-full max-w-md mx-4 bg-card border border-border rounded-2xl shadow-overlay p-6 animate-fade-in">
         <div className="flex items-start gap-3 mb-4">
           <div className="w-9 h-9 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
             <AlertCircle size={16} className="text-amber-400" />
@@ -1242,15 +1243,16 @@ function ConflictDialog({ conflicts, onOverwrite, onSkip, onCancel }: {
             </p>
           </div>
         </div>
-        <div className="max-h-28 overflow-auto bg-white/2 rounded-xl border border-white/6 p-2.5 mb-4 space-y-0.5">
+        <div className="max-h-28 overflow-auto bg-foreground/2 rounded-xl border border-foreground/6 p-2.5 mb-4 space-y-0.5">
           {conflicts.map((p) => <p key={p} className="text-[10px] font-mono text-foreground/40">{p}</p>)}
         </div>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="flex-1 py-2 rounded-xl border border-white/8 text-xs text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-          <button onClick={onSkip} className="flex-1 py-2 rounded-xl border border-white/10 bg-white/4 text-xs text-foreground/70 hover:bg-white/8 transition-colors">Skip existing</button>
+          <button onClick={onCancel} className="flex-1 py-2 rounded-xl border border-foreground/8 text-xs text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+          <button onClick={onSkip} className="flex-1 py-2 rounded-xl border border-foreground/10 bg-foreground/4 text-xs text-foreground/70 hover:bg-foreground/8 transition-colors">Skip existing</button>
           <button onClick={onOverwrite} className="flex-1 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-400 hover:bg-amber-500/22 transition-colors">Overwrite all</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

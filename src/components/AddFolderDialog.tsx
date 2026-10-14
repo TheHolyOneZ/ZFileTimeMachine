@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useState } from 'react';
 import { FolderOpen, X, Play, Info } from 'lucide-react';
 
@@ -17,7 +18,7 @@ const PRESET_GROUPS = [
 ];
 
 export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props) {
-  const folderName = path.split('/').filter(Boolean).pop() ?? path;
+  const folderName = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
   const [patterns, setPatterns] = useState(
     ['node_modules/', 'target/', '.git/', '*.tmp', '*.log'].join('\n'),
@@ -41,9 +42,9 @@ export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props)
     onConfirm(globs);
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-2xl animate-fade-in overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+      <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-overlay animate-fade-in overflow-hidden">
 
 
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border/40">
@@ -75,7 +76,7 @@ export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props)
 
 
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide mb-2">
+            <p className="text-[11px] font-medium text-muted-foreground mb-2">
               Quick add presets
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -101,7 +102,7 @@ export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props)
 
 
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide mb-2">
+            <p className="text-[11px] font-medium text-muted-foreground mb-2">
               Ignore patterns <span className="normal-case font-normal">(one per line, gitignore syntax)</span>
             </p>
             <textarea
@@ -112,9 +113,9 @@ export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props)
               spellCheck={false}
               className="w-full px-3 py-2.5 rounded-xl bg-secondary/30 border border-border/50
                          text-xs font-mono text-foreground/80 focus:outline-none focus:ring-2 focus:ring-ring
-                         resize-none leading-relaxed placeholder:text-muted-foreground/25"
+                         resize-none leading-relaxed placeholder:text-muted-foreground/50"
             />
-            <p className="text-[10px] text-muted-foreground/40 mt-1">
+            <p className="text-[10px] text-muted-foreground/70 mt-1">
               These become the folder's permanent watch rules — you can change them later in Folder Settings.
             </p>
           </div>
@@ -140,9 +141,8 @@ export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props)
               onClick={handleConfirm}
               disabled={isLoading}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
-                         bg-primary text-primary-foreground hover:bg-primary/90
-                         disabled:opacity-50 disabled:cursor-not-allowed
-                         shadow-[0_0_16px_rgba(var(--primary-rgb),0.25)] transition-all"
+                         bg-primary text-primary-foreground shadow-button hover:bg-primary/90
+                         disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {isLoading ? (
                 <span className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
@@ -154,6 +154,7 @@ export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props)
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

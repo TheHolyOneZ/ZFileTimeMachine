@@ -22,8 +22,8 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     <div
       data-ctx-menu
       style={{ position: 'fixed', top: finalY, left: finalX, width: W, zIndex: 9999 }}
-      className="bg-card/98 backdrop-blur-sm border border-border/60 rounded-xl overflow-hidden
-                 shadow-[0_8px_32px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.06)]
+      className="bg-popover backdrop-blur-sm border border-border/60 rounded-xl overflow-hidden
+                 shadow-overlay
                  animate-scale-in py-1"
     >
       {items.map((item, i) => (

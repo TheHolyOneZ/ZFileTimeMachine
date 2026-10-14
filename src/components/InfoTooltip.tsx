@@ -53,7 +53,7 @@ export function InfoTooltip({ title, body, iconSize = 13 }: Props) {
         onClick={handleOpen}
         data-infotooltip
         className={`p-0.5 rounded transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
-          open ? 'text-primary' : 'text-muted-foreground/40 hover:text-primary'
+          open ? 'text-primary' : 'text-muted-foreground/70 hover:text-primary'
         }`}
         aria-label="More information"
       >
@@ -75,8 +75,8 @@ export function InfoTooltip({ title, body, iconSize = 13 }: Props) {
           className="animate-scale-in overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="bg-card/98 backdrop-blur-sm border border-border/60 rounded-xl overflow-hidden
-                          shadow-[0_16px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.04)] relative">
+          <div className="bg-popover backdrop-blur-sm border border-border/60 rounded-xl overflow-hidden
+                          shadow-overlay relative">
 
             <div
               style={{ left: pos.arrowOffset }}
@@ -91,7 +91,7 @@ export function InfoTooltip({ title, body, iconSize = 13 }: Props) {
               <p className="text-xs font-semibold text-foreground/90 leading-tight">{title}</p>
               <button
                 onClick={() => setOpen(false)}
-                className="shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
+                className="shrink-0 p-0.5 rounded text-muted-foreground/70 hover:text-foreground transition-colors"
               >
                 <X size={10} />
               </button>

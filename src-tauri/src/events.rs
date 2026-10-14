@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Runtime};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SnapshotCreated {
@@ -37,23 +37,23 @@ pub struct ErrorOccurred {
     pub context: String,
 }
 
-pub fn emit_snapshot_created(app: &AppHandle, payload: SnapshotCreated) {
+pub fn emit_snapshot_created<R: Runtime>(app: &AppHandle<R>, payload: SnapshotCreated) {
     let _ = app.emit("snapshot:created", payload);
 }
 
-pub fn emit_file_renamed(app: &AppHandle, payload: FileRenamed) {
+pub fn emit_file_renamed<R: Runtime>(app: &AppHandle<R>, payload: FileRenamed) {
     let _ = app.emit("file:renamed", payload);
 }
 
-pub fn emit_scan_progress(app: &AppHandle, payload: FolderScanProgress) {
+pub fn emit_scan_progress<R: Runtime>(app: &AppHandle<R>, payload: FolderScanProgress) {
     let _ = app.emit("folder:scan-progress", payload);
 }
 
-pub fn emit_snapshot_skipped(app: &AppHandle, payload: SnapshotSkipped) {
+pub fn emit_snapshot_skipped<R: Runtime>(app: &AppHandle<R>, payload: SnapshotSkipped) {
     let _ = app.emit("snapshot:skipped", payload);
 }
 
-pub fn emit_error(app: &AppHandle, payload: ErrorOccurred) {
+pub fn emit_error<R: Runtime>(app: &AppHandle<R>, payload: ErrorOccurred) {
     let _ = app.emit("error:occurred", payload);
 }
 
@@ -65,7 +65,7 @@ pub struct StorageWarning {
     pub percent: u8,
 }
 
-pub fn emit_storage_warning(app: &AppHandle, payload: StorageWarning) {
+pub fn emit_storage_warning<R: Runtime>(app: &AppHandle<R>, payload: StorageWarning) {
     let _ = app.emit("storage:warning", payload);
 }
 
@@ -78,6 +78,6 @@ pub struct RecoverProgress {
     pub current_path: String,
 }
 
-pub fn emit_recover_progress(app: &AppHandle, payload: RecoverProgress) {
+pub fn emit_recover_progress<R: Runtime>(app: &AppHandle<R>, payload: RecoverProgress) {
     let _ = app.emit("recover:progress", payload);
 }

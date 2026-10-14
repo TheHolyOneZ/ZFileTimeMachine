@@ -65,10 +65,10 @@ function ModalShell({
   wide?: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-4">
       <div
         className={`bg-card border border-border rounded-2xl
-                    shadow-[0_24px_80px_rgba(0,0,0,0.7)]
+                    shadow-overlay
                     w-full ${wide ? 'max-w-2xl' : 'max-w-lg'}
                     max-h-[92vh] overflow-y-auto animate-scale-in`}
       >
@@ -76,7 +76,7 @@ function ModalShell({
           <div className="flex justify-end -mt-2 -mr-2 mb-2">
             <button
               onClick={onSkip}
-              className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-muted-foreground
+              className="p-1.5 rounded-lg text-muted-foreground/70 hover:text-muted-foreground
                          hover:bg-secondary transition-colors"
               title="Skip guide"
             >
@@ -128,7 +128,7 @@ function PrimaryBtn({
       onClick={onClick}
       disabled={disabled ?? loading}
       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl
-                 bg-primary text-primary-foreground font-medium text-sm
+                 bg-primary text-primary-foreground shadow-button font-medium text-sm
                  hover:bg-primary/90 transition-colors
                  disabled:opacity-40 disabled:cursor-not-allowed"
     >
@@ -197,8 +197,8 @@ export function OnboardingModal({ onComplete }: Props) {
 
   if (step === 'welcome') {
     return (
-      <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-        <div className="bg-card border border-border rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.7)] w-full max-w-md animate-scale-in">
+      <div className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-4">
+        <div className="bg-card border border-border rounded-2xl shadow-overlay w-full max-w-md animate-scale-in">
           <div className="p-8">
 
             <div className="text-center mb-8">
@@ -212,7 +212,7 @@ export function OnboardingModal({ onComplete }: Props) {
             </div>
 
 
-            <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest text-center mb-4">
+            <p className="text-xs font-semibold text-muted-foreground text-center mb-4">
               How would you describe yourself?
             </p>
 
@@ -227,9 +227,9 @@ export function OnboardingModal({ onComplete }: Props) {
                 <Sparkles size={20} className="text-primary" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-foreground">Complete newbie — guide me</p>
+                <p className="font-semibold text-sm text-foreground">Show me around</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Step-by-step setup with tips and explanations
+                  A short walkthrough of adding a folder and rewinding a file
                 </p>
               </div>
               <ChevronRight
@@ -249,9 +249,9 @@ export function OnboardingModal({ onComplete }: Props) {
                 <img src={logoUrl} alt="Z" className="w-6 h-6 rounded-lg object-cover" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-foreground">Normal user — let me in</p>
+                <p className="font-semibold text-sm text-foreground">Skip the tour</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  I know what I'm doing, skip the tutorial
+                  Go straight to the app. You can replay the tour from Settings
                 </p>
               </div>
               <ChevronRight
@@ -265,7 +265,6 @@ export function OnboardingModal({ onComplete }: Props) {
     );
   }
 
-  // ── Step: intro ──────────────────────────────────────────────────────────
 
   if (step === 'intro') {
     return (
@@ -388,7 +387,7 @@ export function OnboardingModal({ onComplete }: Props) {
         {!addedFolder && (
           <button
             onClick={() => setStep('ignore')}
-            className="mt-2.5 w-full text-center text-xs text-muted-foreground/40
+            className="mt-2.5 w-full text-center text-xs text-muted-foreground/70
                        hover:text-muted-foreground transition-colors py-1"
           >
             Skip — I'll add a folder later
@@ -451,7 +450,7 @@ export function OnboardingModal({ onComplete }: Props) {
           })}
         </div>
 
-        <p className="text-xs text-muted-foreground/40 text-center mb-5">
+        <p className="text-xs text-muted-foreground/70 text-center mb-5">
           {selectedIgnores.size} pattern{selectedIgnores.size !== 1 ? 's' : ''} selected
           &nbsp;·&nbsp; you can edit these anytime in Settings
         </p>
@@ -485,7 +484,7 @@ export function OnboardingModal({ onComplete }: Props) {
         {/* Summary card */}
         {addedFolder && (
           <div className="p-4 rounded-xl bg-secondary/30 border border-border/50 mb-6 space-y-2.5">
-            <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest mb-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-3">
               What was set up
             </p>
             <div className="flex items-center gap-2.5 text-sm">

@@ -37,6 +37,11 @@ export function useLiveEvents() {
         toast('info', `File removed from tracking: ${p.relPath.split('/').pop()}`);
       }),
 
+      events.onFileRestored((p) => {
+        qc.invalidateQueries({ queryKey: ['files', p.folderId] });
+        qc.invalidateQueries({ queryKey: ['snapshots', p.fileId] });
+      }),
+
       events.onFileRenamed((p) => {
         scheduleFilesInvalidate(p.folder_id);
         qc.invalidateQueries({ queryKey: ['snapshots', p.file_id] });

@@ -142,9 +142,7 @@ export function FolderDetail() {
     <div className="flex-1 overflow-hidden flex flex-col">
 
 
-      <div className="shrink-0 bg-card/40 border-b border-border/60">
-
-        <div className={`h-[2px] w-full ${colorDef.barClass} opacity-60`} />
+      <div className="shrink-0 border-b border-border/70">
 
         <div className="px-4 py-3 flex items-center gap-3">
           <button
@@ -159,8 +157,9 @@ export function FolderDetail() {
           <div className={`w-8 h-8 rounded-lg ${colorDef.bgClass} flex items-center justify-center shrink-0 relative`}>
             <FolderIcon name={folder?.config.icon} size={16} className={colorDef.iconClass} />
             <span
-              className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-card
-                          ${isPaused ? 'bg-amber-400' : 'bg-emerald-500 shadow-[0_0_5px_theme(colors.emerald.500)]'}`}
+              title={isPaused ? 'Watcher paused' : 'Watcher active'}
+              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card
+                          ${isPaused ? 'bg-amber-400' : 'bg-emerald-500'}`}
             />
           </div>
 
@@ -170,17 +169,13 @@ export function FolderDetail() {
               <h1 className="font-semibold text-foreground text-sm truncate leading-tight">
                 {folder?.displayName ?? <span className="inline-block w-32 h-3.5 bg-secondary/80 rounded animate-pulse" />}
               </h1>
-              {folder && (
-                <span className={`shrink-0 text-[10px] px-1.5 py-px rounded border font-medium
-                  ${isPaused
-                    ? 'bg-amber-500/10 text-amber-400/80 border-amber-500/20'
-                    : 'bg-emerald-500/10 text-emerald-400/80 border-emerald-500/15'
-                  }`}>
-                  {isPaused ? 'Paused' : 'Watching'}
+              {folder && isPaused && (
+                <span className="shrink-0 text-[11px] px-1.5 rounded font-medium bg-amber-500/10 text-amber-400">
+                  Paused
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground/40 truncate font-mono mt-0.5 leading-tight">
+            <p className="text-[11px] text-muted-foreground/80 truncate font-mono mt-0.5 leading-tight" title={folder?.path}>
               {formatPath(folder?.path ?? '')}
             </p>
           </div>
@@ -212,8 +207,7 @@ export function FolderDetail() {
               <Link
                 to={`/folder/${folderId}/recover`}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium
-                           bg-primary/10 text-primary border border-primary/20
-                           hover:bg-primary/20 hover:border-primary/35 transition-all"
+                           bg-primary/12 text-primary hover:bg-primary/20 transition-colors"
                 title="Recover — restore files from any snapshot"
               >
                 <History size={12} />
@@ -242,23 +236,19 @@ export function FolderDetail() {
               className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-medium transition-all
                 ${searchTab === tab.id
                   ? 'text-foreground'
-                  : 'text-muted-foreground/50 hover:text-muted-foreground/80'
+                  : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
-              <span className={searchTab === tab.id ? colorDef.iconClass : ''}>{tab.icon}</span>
+              <span>{tab.icon}</span>
               {tab.label}
               {tab.count != null && tab.count > 0 && (
-                <span className={`text-[10px] px-1.5 py-px rounded-full font-medium
-                  ${searchTab === tab.id
-                    ? 'bg-primary/15 text-primary'
-                    : 'bg-secondary text-muted-foreground/50'
-                  }`}>
+                <span className="text-[11px] tabular-nums text-muted-foreground">
                   {tab.count}
                 </span>
               )}
 
               {searchTab === tab.id && (
-                <span className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full ${colorDef.barClass}`} />
+                <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-t-full bg-primary" />
               )}
             </button>
           ))}
@@ -272,7 +262,7 @@ export function FolderDetail() {
       {searchTab !== 'activity' && (
         <div className="px-4 py-2.5 border-b border-border/30 bg-card/10 shrink-0">
           <div className="relative">
-            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/35 pointer-events-none" />
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
             <input
               type="text"
               value={searchTab === 'files' ? fileSearch : noteQuery}
@@ -280,12 +270,12 @@ export function FolderDetail() {
               placeholder={searchTab === 'files' ? 'Filter files by name…' : 'Search all notes…'}
               className="w-full bg-secondary/30 border border-border/30 rounded-lg pl-8 pr-8 py-2 text-xs
                          focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40
-                         placeholder:text-muted-foreground/25 transition-colors"
+                         placeholder:text-muted-foreground/50 transition-colors"
             />
             {(searchTab === 'files' ? fileSearch : noteQuery) && (
               <button
                 onClick={() => searchTab === 'files' ? setFileSearch('') : setNoteQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-foreground transition-colors"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground transition-colors"
               >
                 <X size={12} />
               </button>
@@ -308,7 +298,7 @@ export function FolderDetail() {
         {searchTab === 'notes' && (
           <div className="flex-1 overflow-auto min-h-0 p-4 space-y-2 animate-fade-in">
             {!noteQuery.trim() && (
-              <div className="flex flex-col items-center justify-center py-14 gap-3 text-muted-foreground/40">
+              <div className="flex flex-col items-center justify-center py-14 gap-3 text-muted-foreground/70">
                 <div className="w-10 h-10 rounded-full bg-secondary/40 border border-border/30 flex items-center justify-center">
                   <MessageSquare size={16} className="opacity-50" />
                 </div>
@@ -348,10 +338,10 @@ export function FolderDetail() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className="text-xs font-mono text-foreground/75 truncate flex-1">{hit.label}</p>
-                          <ArrowRight size={11} className="text-muted-foreground/25 group-hover:text-primary/60 transition-colors shrink-0" />
+                          <ArrowRight size={11} className="text-muted-foreground/50 group-hover:text-primary/60 transition-colors shrink-0" />
                         </div>
                         {hit.createdAt && (
-                          <p className="text-[10px] text-muted-foreground/35 mt-0.5">
+                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
                             {format(new Date(hit.createdAt), 'MMM d, HH:mm')}
                           </p>
                         )}
@@ -431,7 +421,7 @@ export function FolderDetail() {
           {files.filter((f) => f.isBinary).length > 0 && (
             <>
               <span className="text-border/40 text-[11px]">·</span>
-              <span className="text-[11px] text-muted-foreground/40">
+              <span className="text-[11px] text-muted-foreground/70">
                 {files.filter((f) => f.isBinary).length} binary
               </span>
             </>
@@ -447,7 +437,7 @@ export function FolderDetail() {
           )}
 
           {fileSearch && searchTab === 'files' && (
-            <span className="ml-auto text-[11px] text-muted-foreground/35 font-mono">
+            <span className="ml-auto text-[11px] text-muted-foreground/60 font-mono">
               "{fileSearch}"
             </span>
           )}

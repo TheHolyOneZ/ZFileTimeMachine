@@ -82,6 +82,21 @@ function groupByDay(entries: ActivityEntry[]): Group[] {
   return groups;
 }
 
+function humanizeReason(action: string, reason: string): string {
+  if (action === 'scan_complete') {
+    const kv = Object.fromEntries(reason.split(' ').map((p) => p.split('=')));
+    const total = kv.total;
+    const changed = kv.new_or_changed ?? kv.new;
+    if (total !== undefined && changed !== undefined) {
+      return `${total} file${total === '1' ? '' : 's'} checked · ${changed} new or changed`;
+    }
+  }
+  const SOURCES: Record<string, string> = {
+    change: 'Saved', manual: 'Taken manually', interval: 'Scheduled', 'pre-rewind': 'Backup before a rewind', initial: 'First scan',
+  };
+  return SOURCES[reason] ?? reason;
+}
+
 export function ActivityFeed({ folderId }: Props) {
   const { data: entries, isLoading } = useQuery({
     queryKey: ['activity', folderId],
@@ -111,7 +126,7 @@ export function ActivityFeed({ folderId }: Props) {
 
   if (!entries || entries.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground/40">
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground/70">
         <div className="w-10 h-10 rounded-full bg-secondary/40 border border-border/30 flex items-center justify-center">
           <Zap size={18} className="opacity-40" />
         </div>
@@ -128,7 +143,7 @@ export function ActivityFeed({ folderId }: Props) {
         <div key={group.label}>
 
           <div className="flex items-center gap-3 px-4 py-2">
-            <span className="text-[10px] font-semibold text-muted-foreground/35 uppercase tracking-widest whitespace-nowrap">
+            <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
               {group.label}
             </span>
             <div className="flex-1 h-px bg-border/20" />
@@ -156,21 +171,21 @@ export function ActivityFeed({ folderId }: Props) {
                   <div className="flex items-baseline gap-1.5 flex-wrap">
                     <span className="text-xs font-medium text-foreground/80">{meta.label}</span>
                     {entry.relPath && (
-                      <span className="text-xs font-mono text-muted-foreground/50 truncate">
+                      <span className="text-xs font-mono text-foreground/70 truncate">
                         {entry.relPath}
                       </span>
                     )}
                   </div>
                   {entry.reason && (
-                    <p className="text-[10px] text-muted-foreground/35 mt-0.5 leading-relaxed">
-                      {entry.reason}
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                      {humanizeReason(entry.action, entry.reason)}
                     </p>
                   )}
                 </div>
 
 
                 <span
-                  className="text-[10px] text-muted-foreground/30 shrink-0 mt-0.5 group-hover:text-muted-foreground/50 transition-colors"
+                  className="text-[11px] text-muted-foreground shrink-0 mt-0.5"
                   title={format(new Date(entry.timestamp), 'PPpp')}
                 >
                   {formatDistanceToNow(new Date(entry.timestamp), { addSuffix: true })}

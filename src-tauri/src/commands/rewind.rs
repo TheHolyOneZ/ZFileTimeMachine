@@ -1,5 +1,8 @@
-use std::path::PathBuf;
-use tauri::{AppHandle, State};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use rusqlite::Connection;
+use crate::store::cas::CasStore;
+use tauri::{AppHandle, Emitter, State};
 use serde::{Deserialize, Serialize};
 use crate::db::repo;
 use crate::diff::{self, DiffResult};
@@ -53,6 +56,22 @@ pub fn preview_diff(
     Ok(diff::compute(&compare_data, &snapshot_data))
 }
 
+
+pub fn write_snapshot_to_disk(
+    db: &Arc<Mutex<Connection>>,
+    cas: &CasStore,
+    file_id: i64,
+    abs_path: &Path,
+    snapshot_hash: &str,
+) -> Result<(), String> {
+    let content = cas.get(snapshot_hash).map_err(|e| e.to_string())?;
+    util_fs::atomic_write(abs_path, &content, snapshot_hash).map_err(|e| e.to_string())?;
+
+    let conn = db.lock().map_err(|_| "db lock poisoned")?;
+    repo::mark_file_restored(&conn, file_id, snapshot_hash, util_fs::mtime_millis(abs_path))
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn rewind_to(
     snapshot_id: i64,
@@ -60,7 +79,7 @@ pub async fn rewind_to(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<RewindResult, String> {
-    let (abs_path, rel_path, snapshot_hash, config, folder_id) = {
+    let (abs_path, rel_path, snapshot_hash, config, folder_id, file_id) = {
         let conn = state.db.lock().map_err(|_| "db lock poisoned")?;
 
         let snapshot = repo::get_snapshot(&conn, snapshot_id)
@@ -76,7 +95,7 @@ pub async fn rewind_to(
             .ok_or_else(|| "Folder not found".to_string())?;
 
         let abs = PathBuf::from(&folder.path).join(&file.rel_path);
-        (abs, file.rel_path.clone(), snapshot.content_hash.clone(), folder.config, file.folder_id)
+        (abs, file.rel_path.clone(), snapshot.content_hash.clone(), folder.config, file.folder_id, file.id)
     };
 
     let db = state.db_arc();
@@ -97,8 +116,12 @@ pub async fn rewind_to(
         };
 
 
-        let content = cas.get(&snapshot_hash).map_err(|e| e.to_string())?;
-        util_fs::atomic_write(&abs_path, &content, &snapshot_hash).map_err(|e| e.to_string())?;
+        write_snapshot_to_disk(&db, &cas, file_id, &abs_path, &snapshot_hash)?;
+        let _ = app.emit("file:restored", serde_json::json!({
+            "folderId": folder_id,
+            "fileId": file_id,
+            "relPath": rel_path,
+        }));
 
         Ok(RewindResult {
             pre_rewind_snapshot_id,

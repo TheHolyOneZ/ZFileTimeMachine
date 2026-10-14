@@ -79,7 +79,7 @@ function FolderSettingsPopup({
   return createPortal(
     <div
       style={{ position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, width: 260, maxHeight: pos.maxHeight, zIndex: 9999 }}
-      className="bg-card/98 border border-border/70 rounded-xl shadow-2xl animate-scale-in overflow-hidden"
+      className="bg-popover border border-border/70 rounded-xl shadow-overlay animate-scale-in overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-secondary/30">
@@ -87,7 +87,7 @@ function FolderSettingsPopup({
           <Folder size={10} className="text-primary/60" />
           {dirName}/
         </span>
-        <button onClick={onClose} className="p-1 rounded hover:bg-secondary text-muted-foreground/40 hover:text-foreground transition-colors">
+        <button onClick={onClose} className="p-1 rounded hover:bg-secondary text-muted-foreground/70 hover:text-foreground transition-colors">
           <X size={10} />
         </button>
       </div>
@@ -108,9 +108,9 @@ function FolderSettingsPopup({
             ? <><PlayCircle size={13} /><span className="flex-1 text-left">Re-enable auto-snapshots</span></>
             : <><PauseCircle size={13} /><span className="flex-1 text-left">Pause auto-snapshots</span></>
           }
-          <span className="text-[10px] text-muted-foreground/40">all {totalFiles} files</span>
+          <span className="text-[10px] text-muted-foreground/70">all {totalFiles} files</span>
         </button>
-        <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+        <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
           Paused files still appear in the list and can be snapshotted manually via the camera icon.
         </p>
       </div>
@@ -163,13 +163,13 @@ function FolderEntry({ folderId, subPath, name, totalFiles, pausedFiles, onClick
         className="w-full flex items-center gap-2.5 px-4 py-2.5 hover:bg-secondary/40
                    border-b border-border/30 last:border-0 transition-colors cursor-pointer group"
       >
-        <ChevronRight size={13} className="text-muted-foreground/30 group-hover:text-primary/50 transition-colors shrink-0" />
+        <ChevronRight size={13} className="text-muted-foreground/60 group-hover:text-primary/50 transition-colors shrink-0" />
         {allPaused
           ? <FolderOpen size={13} className="text-amber-400/60 shrink-0" />
           : <Folder size={13} className="text-primary/60 group-hover:text-primary/80 transition-colors shrink-0" />
         }
         <span className="text-sm text-foreground/80 flex-1 min-w-0 truncate select-none">
-          {name}<span className="text-muted-foreground/40">/</span>
+          {name}<span className="text-muted-foreground/70">/</span>
         </span>
         {allPaused && (
           <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-400/70 border-amber-500/20 shrink-0">
@@ -179,16 +179,16 @@ function FolderEntry({ folderId, subPath, name, totalFiles, pausedFiles, onClick
         <button
           ref={settingsBtnRef}
           onClick={openSettings}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground/40
+          className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground/70
                      hover:text-foreground hover:bg-secondary transition-all shrink-0"
           title="Folder settings"
         >
           <Settings2 size={11} />
         </button>
-        <span className="text-xs text-muted-foreground/35 shrink-0 tabular-nums select-none">
+        <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums select-none">
           {totalFiles}
         </span>
-        <ChevronRight size={11} className="text-muted-foreground/25 group-hover:text-muted-foreground/50 transition-colors shrink-0" />
+        <ChevronRight size={11} className="text-muted-foreground/50 group-hover:text-muted-foreground/50 transition-colors shrink-0" />
       </div>
 
       {settingsOpen && anchorRect && (
@@ -224,7 +224,7 @@ function PathBar({ subPath, onUp }: { subPath: string; onUp: () => void }) {
         <ArrowLeft size={13} />
         <span>{parentPath || 'root'}/</span>
       </button>
-      <span className="text-muted-foreground/30 text-xs">/</span>
+      <span className="text-muted-foreground/60 text-xs">/</span>
       <span className="flex items-center gap-1.5 text-xs font-medium text-foreground/70">
         <Folder size={11} className="text-primary/60" />
         {currentName}/
@@ -336,21 +336,16 @@ export function FolderBrowser({ folderId, files, filter = '', autoOpenFileId, on
         <div className="mx-4 border-t border-border/20 my-0.5" />
       )}
 
-      <FileList
-        files={directFiles}
-        filter={isSearching ? filter : ''}
-        scrollRef={scrollRef}
-        autoOpenFileId={autoOpenFileId}
-        onAutoOpened={onAutoOpened}
-        stripPrefix={subPath || undefined}
-      />
 
-      {isEmpty && !subPath && (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3 animate-fade-in">
-          <Folder size={24} className="opacity-20" />
-          <p className="text-sm">No files tracked yet</p>
-          <p className="text-xs opacity-50">Files appear once the initial scan completes</p>
-        </div>
+      {(directFiles.length > 0 || (isEmpty && !subPath)) && (
+        <FileList
+          files={directFiles}
+          filter={isSearching ? filter : ''}
+          scrollRef={scrollRef}
+          autoOpenFileId={autoOpenFileId}
+          onAutoOpened={onAutoOpened}
+          stripPrefix={subPath || undefined}
+        />
       )}
 
       {isEmpty && subPath && (

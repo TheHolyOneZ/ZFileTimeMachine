@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
@@ -18,9 +19,9 @@ export function RecoverConfirmDialog({ fileCount, totalBytes, onConfirm, onCance
   const [typed, setTyped] = useState('');
   const ready = typed === 'RESTORE';
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="relative w-full max-w-md mx-4 bg-card border border-border rounded-2xl shadow-2xl p-6 animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+      <div className="relative w-full max-w-md mx-4 bg-card border border-border rounded-2xl shadow-overlay p-6 animate-fade-in">
         <button
           onClick={onCancel}
           className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
@@ -63,7 +64,7 @@ export function RecoverConfirmDialog({ fileCount, totalBytes, onConfirm, onCance
             placeholder="RESTORE"
             className="w-full px-3 py-2 rounded-lg bg-secondary/40 border border-border/60
                        text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring
-                       placeholder:text-muted-foreground/30"
+                       placeholder:text-muted-foreground/60"
           />
         </div>
 
@@ -86,6 +87,7 @@ export function RecoverConfirmDialog({ fileCount, totalBytes, onConfirm, onCance
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

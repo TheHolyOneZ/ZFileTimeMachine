@@ -79,7 +79,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl border
-                          shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-md animate-fade-in ${COLORS[t.kind]}`}
+                          shadow-overlay backdrop-blur-md animate-fade-in ${COLORS[t.kind]}`}
             >
               <Icon size={15} className="mt-0.5 shrink-0" />
               <span className="text-sm text-foreground flex-1 leading-snug">{t.message}</span>

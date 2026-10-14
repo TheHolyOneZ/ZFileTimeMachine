@@ -12,6 +12,8 @@
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri%202-24C8DB?logo=tauri)](https://tauri.app)
 [![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?logo=react)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Backend-Rust-CE422B?logo=rust)](https://www.rust-lang.org)
+[![Version](https://img.shields.io/badge/version-0.2.0-3b82f6)](CHANGELOG.md)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows%20%7C%20macOS-555)](#platform-support)
 [![Download](https://img.shields.io/badge/Download-zsync.eu%2Fzftm-3b82f6)](https://zsync.eu/zftm/)
 
 **[Download prebuilt binaries for Linux, Windows & macOS → zsync.eu/zftm/](https://zsync.eu/zftm/)**
@@ -31,11 +33,29 @@ No cloud. No git. No command line. Just your files, safely versioned, on your ow
 
 ---
 
+## What's new in 0.2.0
+
+- **Restored files stay in the list.** Fixes [#1](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues/1), where rewinding a file on Windows made it vanish from the monitored files. Also fixes copies being mistaken for renames, and the timeline's "Current" marker after a rewind.
+- **A fresh look** with a custom title bar, built-in search (`Ctrl K` / `⌘ K`), new typography, and a reworked light theme. Navigation is exactly where it was.
+
+See the full [changelog](CHANGELOG.md).
+
+---
+
 ## Screenshots
 
-| Watched Folders dashboard | File timeline & snapshot history |
+| Watched folders | File timeline |
 |---|---|
-| ![Dashboard](docs/screenshot-dashboard.png) | ![Timeline](docs/screenshot-timeline.png) |
+| ![Dashboard with three watched folders](docs/screenshot-dashboard.png) | ![A file's snapshot timeline](docs/screenshot-timeline.png) |
+| **Rewind with diff preview** | **Bulk recovery** |
+| ![Rewind dialog showing a diff](docs/screenshot-rewind.png) | ![Recover screen with a file's snapshot list](docs/screenshot-recover.png) |
+
+<details>
+<summary>Light theme</summary>
+
+![File timeline in the light theme](docs/screenshot-light.png)
+
+</details>
 
 ---
 
@@ -251,10 +271,14 @@ For files you never want auto-snapshotted (build artifacts, lock files, frequent
 ### Main Dashboard
 
 The opening screen shows all your watched folders as cards. Each card displays:
-- Active or paused status with a live indicator
-- Number of files tracked and storage used
-- Last snapshot time
-- Quick access to pause, settings, and recovery
+- Watching or paused status (a dot on the folder icon, plus a "Paused" label when paused)
+- The folder path, how snapshots are triggered, and how many are kept
+- When the folder was added
+- On hover: quick access to recovery, settings, pause/resume, and removal (also available by right-clicking)
+
+### Title Bar & Search
+
+The title bar holds the app name, a search box, and the window controls. Click the search box or press `Ctrl K` (`⌘ K` on macOS) to jump to any folder or screen. On Windows and Linux the app draws its own minimize, maximize, and close buttons; on macOS it keeps the native traffic lights.
 
 ### Folder Detail
 
@@ -299,175 +323,53 @@ App-wide options:
 
 ```
 ZFileTimeMachine/
-├── src/
-│   ├── assets/
-│   │   └── logo.png
+├── src/                          # React + TypeScript frontend
+│   ├── assets/logo.png
 │   ├── components/
-│   │   ├── ActivityFeed.tsx
-│   │   ├── AddFolderDialog.tsx
-│   │   ├── CommandPalette.tsx
-│   │   ├── ContextMenu.tsx
-│   │   ├── DateTimePicker.tsx
-│   │   ├── DevPanel.tsx
-│   │   ├── DiffViewer.tsx
-│   │   ├── ErrorBoundary.tsx
-│   │   ├── FileList.tsx
-│   │   ├── FolderBrowser.tsx
-│   │   ├── FolderCard.tsx
-│   │   ├── FolderIcon.tsx
-│   │   ├── IgnoreRulesEditor.tsx
-│   │   ├── InfoTooltip.tsx
-│   │   ├── KeyboardShortcuts.tsx
-│   │   ├── NoteEditor.tsx
-│   │   ├── OnboardingModal.tsx
-│   │   ├── RecoverConfirmDialog.tsx
-│   │   ├── RecoverTree.tsx
-│   │   ├── RewindDialog.tsx
-│   │   ├── ScanProgress.tsx
-│   │   ├── Timeline.tsx
-│   │   └── TristateCheckbox.tsx
-│   ├── context/
-│   │   ├── OnboardingContext.tsx
-│   │   └── ToastContext.tsx
-│   ├── hooks/
-│   │   ├── useContextMenu.ts
-│   │   ├── useFolders.ts
-│   │   ├── useLiveEvents.ts
-│   │   ├── useOnboarding.ts
-│   │   └── useTimeline.ts
-│   ├── lib/
-│   │   ├── events.ts
-│   │   ├── folderAppearance.ts
-│   │   ├── popup.ts
-│   │   ├── tauri.ts
-│   │   └── types.ts
-│   ├── routes/
-│   │   ├── About.tsx
-│   │   ├── FolderDetail.tsx
-│   │   ├── FolderRecover.tsx
-│   │   ├── Folders.tsx
-│   │   └── Settings.tsx
-│   ├── App.tsx
-│   ├── index.css
-│   ├── main.tsx
-│   └── vite-env.d.ts
-├── src-tauri/
-│   ├── capabilities/
-│   │   └── default.json
+│   │   ├── TitleBar.tsx          # Custom title bar, search, window controls
+│   │   ├── FolderCard.tsx  FolderBrowser.tsx  FileList.tsx
+│   │   ├── Timeline.tsx  DiffViewer.tsx  RewindDialog.tsx
+│   │   ├── RecoverTree.tsx  RecoverConfirmDialog.tsx  ConfirmDialog.tsx
+│   │   ├── CommandPalette.tsx  ContextMenu.tsx  KeyboardShortcuts.tsx
+│   │   ├── ActivityFeed.tsx  NoteEditor.tsx  IgnoreRulesEditor.tsx
+│   │   ├── AddFolderDialog.tsx  OnboardingModal.tsx  DevPanel.tsx
+│   │   └── …                     # small UI pieces (tooltips, checkboxes, pickers)
+│   ├── context/                  # Toasts, onboarding
+│   ├── hooks/                    # React Query hooks and live backend events
+│   ├── lib/                      # Tauri command bindings, types, event helpers
+│   ├── routes/                   # Folders, FolderDetail, FolderRecover, Settings, About
+│   ├── App.tsx  main.tsx  index.css
+├── src-tauri/                    # Rust backend
+│   ├── capabilities/default.json # Permissions granted to the window
 │   ├── icons/
-│   │   ├── android/
-│   │   │   ├── mipmap-anydpi-v26/
-│   │   │   │   └── ic_launcher.xml
-│   │   │   ├── mipmap-hdpi/
-│   │   │   │   ├── ic_launcher_foreground.png
-│   │   │   │   ├── ic_launcher_round.png
-│   │   │   │   └── ic_launcher.png
-│   │   │   ├── mipmap-mdpi/
-│   │   │   │   ├── ic_launcher_foreground.png
-│   │   │   │   ├── ic_launcher_round.png
-│   │   │   │   └── ic_launcher.png
-│   │   │   ├── mipmap-xhdpi/
-│   │   │   │   ├── ic_launcher_foreground.png
-│   │   │   │   ├── ic_launcher_round.png
-│   │   │   │   └── ic_launcher.png
-│   │   │   ├── mipmap-xxhdpi/
-│   │   │   │   ├── ic_launcher_foreground.png
-│   │   │   │   ├── ic_launcher_round.png
-│   │   │   │   └── ic_launcher.png
-│   │   │   ├── mipmap-xxxhdpi/
-│   │   │   │   ├── ic_launcher_foreground.png
-│   │   │   │   ├── ic_launcher_round.png
-│   │   │   │   └── ic_launcher.png
-│   │   │   └── values/
-│   │   │       └── ic_launcher_background.xml
-│   │   ├── ios/
-│   │   │   ├── AppIcon-20x20@1x.png
-│   │   │   ├── AppIcon-20x20@2x-1.png
-│   │   │   ├── AppIcon-20x20@2x.png
-│   │   │   ├── AppIcon-20x20@3x.png
-│   │   │   ├── AppIcon-29x29@1x.png
-│   │   │   ├── AppIcon-29x29@2x-1.png
-│   │   │   ├── AppIcon-29x29@2x.png
-│   │   │   ├── AppIcon-29x29@3x.png
-│   │   │   ├── AppIcon-40x40@1x.png
-│   │   │   ├── AppIcon-40x40@2x-1.png
-│   │   │   ├── AppIcon-40x40@2x.png
-│   │   │   ├── AppIcon-40x40@3x.png
-│   │   │   ├── AppIcon-512@2x.png
-│   │   │   ├── AppIcon-60x60@2x.png
-│   │   │   ├── AppIcon-60x60@3x.png
-│   │   │   ├── AppIcon-76x76@1x.png
-│   │   │   ├── AppIcon-76x76@2x.png
-│   │   │   └── AppIcon-83.5x83.5@2x.png
-│   │   ├── 128x128.png
-│   │   ├── 128x128@2x.png
-│   │   ├── 32x32.png
-│   │   ├── 64x64.png
-│   │   ├── icon.icns
-│   │   ├── icon.ico
-│   │   ├── icon.png
-│   │   ├── Square107x107Logo.png
-│   │   ├── Square142x142Logo.png
-│   │   ├── Square150x150Logo.png
-│   │   ├── Square284x284Logo.png
-│   │   ├── Square30x30Logo.png
-│   │   ├── Square310x310Logo.png
-│   │   ├── Square44x44Logo.png
-│   │   ├── Square71x71Logo.png
-│   │   ├── Square89x89Logo.png
-│   │   └── StoreLogo.png
 │   ├── src/
-│   │   ├── commands/
-│   │   │   ├── dev.rs
-│   │   │   ├── folders.rs
-│   │   │   ├── mod.rs
-│   │   │   ├── notes.rs
-│   │   │   ├── recover.rs
-│   │   │   ├── rewind.rs
-│   │   │   ├── settings.rs
-│   │   │   └── snapshots.rs
-│   │   ├── db/
-│   │   │   ├── migrations.rs
-│   │   │   ├── mod.rs
-│   │   │   ├── repo.rs
-│   │   │   └── schema.sql
-│   │   ├── snapshot/
-│   │   │   ├── binary.rs
-│   │   │   ├── hasher.rs
-│   │   │   ├── mod.rs
-│   │   │   └── retention.rs
-│   │   ├── store/
-│   │   │   ├── cas.rs
-│   │   │   └── mod.rs
-│   │   ├── util/
-│   │   │   ├── fs.rs
-│   │   │   └── mod.rs
-│   │   ├── watcher/
-│   │   │   ├── debounce.rs
-│   │   │   ├── ignore.rs
-│   │   │   ├── mod.rs
-│   │   │   └── supervisor.rs
-│   │   ├── config.rs
-│   │   ├── diff.rs
-│   │   ├── error.rs
-│   │   ├── events.rs
-│   │   ├── lib.rs
-│   │   ├── main.rs
-│   │   └── rename.rs
-│   ├── build.rs
-│   ├── Cargo.lock
-│   ├── Cargo.toml
-│   └── tauri.conf.json
-├── index.html
-├── package.json
-├── pnpm-lock.yaml
-├── postcss.config.js
-├── README.md
-├── tailwind.config.ts
-├── tsconfig.json
-├── tsconfig.node.json
-└── vite.config.ts
+│   │   ├── commands/             # Tauri commands: folders, snapshots, rewind, recover, settings, notes, dev
+│   │   ├── db/                   # SQLite schema, migrations, queries
+│   │   ├── snapshot/             # Hashing, binary detection, retention
+│   │   ├── store/cas.rs          # Content-addressed blob store
+│   │   ├── watcher/              # File watcher supervisor, ignore rules, debounce
+│   │   ├── util/fs.rs            # Atomic, verified file writes
+│   │   ├── rename.rs  diff.rs  events.rs  config.rs  error.rs
+│   │   └── lib.rs  main.rs
+│   ├── tauri.conf.json           # App and window config (all platforms)
+│   ├── tauri.macos.conf.json     # macOS overrides (native traffic lights)
+│   └── Cargo.toml
+├── docs/                         # README screenshots
+├── CHANGELOG.md
+├── package.json  pnpm-lock.yaml  vite.config.ts  tailwind.config.ts
+└── README.md
 ```
+
+
+---
+
+## Platform Support
+
+| Platform | Status | Notes |
+|---|---|---|
+| **Linux** | Supported | Primary development platform. File watching via inotify. |
+| **Windows** | Supported | Windows 10 and 11. On Windows 11 the window has rounded corners and a native shadow. File watching via ReadDirectoryChangesW. |
+| **macOS** | Builds, not fully tested | Apple Silicon and Intel builds are produced. The app shows a notice on first launch; please [report issues](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues). File watching via FSEvents. |
 
 ---
 
@@ -478,8 +380,8 @@ ZFileTimeMachine stores everything locally on your machine:
 | Platform | Location |
 |---|---|
 | **Linux** | `~/.local/share/zfiletimemachine/` |
-| **macOS** | `~/Library/Application Support/zfiletimemachine/` |
-| **Windows** | `%APPDATA%\zfiletimemachine\` |
+| **macOS** | `~/Library/Application Support/com.zfiletimemachine.ZFileTimeMachine/` |
+| **Windows** | `%LOCALAPPDATA%\zfiletimemachine\ZFileTimeMachine\data\` |
 
 Inside that folder:
 
@@ -488,7 +390,9 @@ zfiletimemachine/
 ├── db.sqlite        # All metadata: folders, files, snapshots, notes
 ├── activity.log     # Human-readable chronological event log
 └── cas/             # Content blobs, deduplicated by SHA-256 hash
-    ├── a1b2c3...    # Each unique file content is stored only once
+    ├── 73/          # Sharded by the first two bytes of the hash
+    │   └── be/
+    │       └── 73be6e8f…     # Named by its full hash; each unique content is stored once
     └── ...
 ```
 
@@ -516,6 +420,12 @@ pnpm tauri dev
 
 # Build a production release package
 pnpm tauri build
+
+# Run the backend test suite
+cd src-tauri && cargo test
+
+# Type-check and lint the frontend
+pnpm check
 ```
 
 ---
@@ -546,6 +456,7 @@ pnpm tauri build
 - React Query 5 / TanStack Query (server state, caching, background refetch)
 - Lucide React (icon library)
 - date-fns (date formatting)
+- Geist and Geist Mono (bundled typefaces, no network needed)
 
 **Backend (Rust)**
 - Tauri 2 (cross-platform desktop app framework, IPC bridge)

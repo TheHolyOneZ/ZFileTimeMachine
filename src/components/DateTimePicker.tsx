@@ -141,14 +141,14 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
                       : 'border-border/50 hover:border-border hover:bg-secondary/80'
                     }`}
       >
-        <Calendar size={13} className={displayValue ? 'text-primary/60' : 'text-muted-foreground/30'} />
-        <span className={`flex-1 text-[12px] truncate ${displayValue ? 'text-foreground/80' : 'text-muted-foreground/30'}`}>
+        <Calendar size={13} className={displayValue ? 'text-primary/60' : 'text-muted-foreground/60'} />
+        <span className={`flex-1 text-[12px] truncate ${displayValue ? 'text-foreground/80' : 'text-muted-foreground/60'}`}>
           {displayValue ?? placeholder}
         </span>
         {displayValue && (
           <button
             onClick={(e) => { e.stopPropagation(); onChange(''); }}
-            className="p-0.5 rounded hover:bg-white/10 text-muted-foreground/30 hover:text-muted-foreground transition-colors"
+            className="p-0.5 rounded hover:bg-foreground/10 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
           >
             <X size={11} />
           </button>
@@ -158,7 +158,7 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
 
       {open && (
         <div className="absolute top-full left-0 mt-1.5 z-50 w-72 rounded-2xl
-                        bg-card border border-border/60 shadow-2xl shadow-black/40
+                        bg-card border border-border/60 shadow-overlay
                         animate-fade-in overflow-hidden">
 
 
@@ -183,7 +183,7 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
 
           <div className="grid grid-cols-7 px-3 pt-2.5 pb-1">
             {DAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] font-medium text-muted-foreground/40 py-1">
+              <div key={d} className="text-center text-[10px] font-medium text-muted-foreground/70 py-1">
                 {d}
               </div>
             ))}
@@ -198,7 +198,7 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
                     onClick={() => { setSelDay(day); setSelYear(viewYear); setSelMonth(viewMonth); }}
                     className={`w-8 h-8 rounded-xl text-[12px] font-medium transition-all
                                 ${isSelectedDay(day)
-                                  ? 'bg-primary text-primary-foreground shadow-[0_0_8px_hsl(217_91%_60%/0.4)]'
+                                  ? 'bg-primary text-primary-foreground shadow-button'
                                   : isToday(day)
                                     ? 'text-primary border border-primary/30 hover:bg-primary/15'
                                     : 'text-foreground/60 hover:bg-secondary hover:text-foreground'
@@ -213,7 +213,7 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
 
 
           <div className="flex items-center gap-3 px-4 py-3 border-t border-border/30 bg-secondary/10">
-            <Clock size={13} className="text-muted-foreground/40 shrink-0" />
+            <Clock size={13} className="text-muted-foreground/70 shrink-0" />
             <div className="flex items-center gap-1.5">
               <input
                 type="number" min={0} max={23} value={pad(hour)}
@@ -221,7 +221,7 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
                 className="w-12 text-center px-1.5 py-1.5 rounded-lg bg-secondary/60 border border-border/50
                            text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
               />
-              <span className="text-muted-foreground/40 font-mono font-bold">:</span>
+              <span className="text-muted-foreground/70 font-mono font-bold">:</span>
               <input
                 type="number" min={0} max={59} value={pad(minute)}
                 onChange={(e) => setMinute(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
@@ -229,7 +229,7 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
                            text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
               />
             </div>
-            <span className="text-[10px] text-muted-foreground/30 ml-auto">HH : MM</span>
+            <span className="text-[10px] text-muted-foreground/60 ml-auto">HH : MM</span>
           </div>
 
 
@@ -250,9 +250,8 @@ export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & t
                 onClick={commit}
                 disabled={!hasSelection}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium
-                           bg-primary text-primary-foreground hover:bg-primary/90
-                           disabled:opacity-30 disabled:cursor-not-allowed transition-all
-                           shadow-[0_0_10px_hsl(217_91%_60%/0.25)]"
+                           bg-primary text-primary-foreground shadow-button hover:bg-primary/90
+                           disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 Apply
               </button>

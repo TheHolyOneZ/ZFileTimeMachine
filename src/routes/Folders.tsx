@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderPlus, HardDrive, Loader2, Activity, Zap, PauseCircle } from 'lucide-react';
+import { FolderPlus, HardDrive, Loader2 } from 'lucide-react';
 import { useFolders, useAddFolder } from '@/hooks/useFolders';
 import { FolderCard } from '@/components/FolderCard';
 import { AddFolderDialog } from '@/components/AddFolderDialog';
@@ -19,20 +19,9 @@ const DEFAULT_CONFIG: FolderConfig = {
   binary_keep_last: 3,
 };
 
-function SkeletonStatTiles() {
-  return (
-    <div className="grid grid-cols-4 gap-3 mb-6 animate-pulse">
-      <div className="rounded-xl border border-border/30 bg-card/50 h-[86px]" />
-      <div className="rounded-xl border border-border/30 bg-card/50 h-[86px]" />
-      <div className="col-span-2 rounded-xl border border-border/30 bg-card/50 h-[86px]" />
-    </div>
-  );
-}
-
 function SkeletonCard() {
   return (
     <div className="flex items-stretch rounded-xl border border-border/40 bg-card/50 animate-pulse overflow-hidden">
-      <div className="w-[3px] bg-secondary/60 shrink-0 rounded-l-xl" />
       <div className="flex items-center gap-4 px-4 py-4 flex-1">
         <div className="w-11 h-11 rounded-xl bg-secondary/80 shrink-0" />
         <div className="flex-1 space-y-2">
@@ -117,7 +106,7 @@ export function Folders() {
       {
         onError: (e) => { toast('error', String(e)); },
         onSuccess: () => {
-          const name = path.split('/').filter(Boolean).pop() ?? path;
+          const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
           toast('success', `Now watching "${name}".`);
           setPendingPath(null);
         },
@@ -126,18 +115,16 @@ export function Folders() {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-6 relative">
+    <div className="flex-1 overflow-auto px-8 py-10 relative">
 
 
       {isDragging && (
-        <div className="fixed inset-0 z-50 bg-primary/10 border-2 border-primary/40 border-dashed
+        <div className="fixed inset-0 z-50 bg-background/85 border-2 border-primary/50 border-dashed
                         flex items-center justify-center pointer-events-none">
           <div className="text-center">
-            <div className="w-20 h-20 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center mx-auto mb-4">
-              <FolderPlus size={36} className="text-primary" />
-            </div>
-            <p className="text-lg font-semibold text-primary/90">Drop to start watching</p>
-            <p className="text-sm text-primary/50 mt-1">Default ignore patterns applied — adjust in Folder Settings</p>
+            <FolderPlus size={32} className="text-primary mx-auto mb-3" />
+            <p className="text-lg font-semibold text-foreground">Drop to start watching</p>
+            <p className="text-sm text-muted-foreground mt-1">Common build folders are ignored. You can change this in folder settings.</p>
           </div>
         </div>
       )}
@@ -145,43 +132,39 @@ export function Folders() {
       <div className="max-w-3xl mx-auto animate-fade-in">
 
 
-        <div className="relative flex items-center justify-between gap-4 mb-6">
-          <div className="absolute -top-8 left-0 w-72 h-32 bg-primary/6 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="relative">
-            <div className="flex items-center gap-2.5 mb-0.5">
-              <h1 className="text-2xl font-bold tracking-tight">Watched Folders</h1>
-              {hasAny && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20 font-medium">
-                  {totalCount}
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground/60">
-              {isLoading ? 'Loading…' : hasAny ? 'Version history running in the background.' : 'No folders tracked yet — drop one here or click Add Folder.'}
+        <div className="flex items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-[28px] leading-tight font-semibold tracking-tight">Watched folders</h1>
+            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+              {isLoading ? 'Loading…' : hasAny ? (
+                <>
+                  <span className={`w-1.5 h-1.5 rounded-full ${activeCount > 0 ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                  <span>
+                    {activeCount} watching
+                    {pausedCount > 0 && <> · <span className="text-amber-400">{pausedCount} paused</span></>}
+                  </span>
+                </>
+              ) : 'Nothing tracked yet.'}
             </p>
           </div>
 
-          <button
-            onClick={handleAdd}
-            disabled={addFolder.isPending}
-            className="relative shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm rounded-xl
-                       bg-primary text-primary-foreground font-medium
-                       hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-                       shadow-[0_0_20px_hsl(217_91%_60%/0.28)]
-                       hover:shadow-[0_0_28px_hsl(217_91%_60%/0.40)]
-                       transition-all"
-          >
-            {addFolder.isPending ? <Loader2 size={15} className="animate-spin-slow" /> : <FolderPlus size={15} />}
-            {addFolder.isPending ? 'Adding…' : 'Add Folder'}
-          </button>
+          {hasAny && (
+            <button
+              onClick={handleAdd}
+              disabled={addFolder.isPending}
+              className="shrink-0 flex items-center gap-2 px-3.5 py-2 text-sm rounded-lg
+                         bg-primary text-primary-foreground shadow-button font-medium
+                         hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {addFolder.isPending ? <Loader2 size={15} className="animate-spin-slow" /> : <FolderPlus size={15} />}
+              {addFolder.isPending ? 'Adding…' : 'Add folder'}
+            </button>
+          )}
         </div>
 
 
         {isLoading && (
           <div>
-            <SkeletonStatTiles />
             <div className="space-y-2.5">
               <SkeletonCard />
               <SkeletonCard />
@@ -192,104 +175,31 @@ export function Folders() {
 
 
         {!isLoading && !hasAny && (
-          <div className="flex flex-col items-center justify-center py-16 gap-5 animate-fade-in">
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/15 rounded-3xl blur-2xl scale-150 animate-pulse" />
-              <div className="relative w-24 h-24 rounded-3xl bg-secondary/60 border border-border/60 flex items-center justify-center">
-                <HardDrive size={38} className="text-muted-foreground/30" />
-              </div>
-              <div className="absolute -bottom-2 -right-2 w-9 h-9 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center shadow-[0_0_12px_hsl(217_91%_60%/0.3)]">
-                <FolderPlus size={16} className="text-primary" />
-              </div>
+          <div className="flex flex-col items-center text-center py-16 px-6 rounded-xl border border-dashed border-border animate-fade-in">
+            <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center mb-4">
+              <HardDrive size={22} className="text-muted-foreground" />
             </div>
-
-            <div className="text-center max-w-xs">
-              <p className="font-semibold text-foreground/80 mb-1.5">No folders watched yet</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Add a folder to start capturing automatic file snapshots.
-                Every save is versioned — rewind any file to any moment.
-              </p>
-            </div>
-
+            <p className="font-medium text-foreground">Pick a folder to start keeping history</p>
+            <p className="text-sm text-muted-foreground mt-1.5 max-w-sm leading-relaxed">
+              Every time a file in it is saved, a snapshot is stored locally.
+              You can rewind any file to any earlier version.
+            </p>
             <button
               onClick={handleAdd}
               disabled={addFolder.isPending}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
-                         bg-primary/12 border border-primary/25 text-primary
-                         hover:bg-primary/20 hover:border-primary/40 transition-all"
+              className="mt-5 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                         bg-primary text-primary-foreground shadow-button hover:bg-primary/90 disabled:opacity-50"
             >
-              {addFolder.isPending ? <Loader2 size={14} className="animate-spin-slow" /> : <FolderPlus size={14} />}
-              {addFolder.isPending ? 'Adding…' : 'Pick a folder'}
+              {addFolder.isPending ? <Loader2 size={15} className="animate-spin-slow" /> : <FolderPlus size={15} />}
+              {addFolder.isPending ? 'Adding…' : 'Add folder'}
             </button>
-
-            <div className="border-2 border-dashed border-border/25 rounded-xl px-8 py-3 text-xs text-muted-foreground/30">
-              or drag &amp; drop a folder anywhere on this window
-            </div>
+            <p className="text-xs text-muted-foreground/70 mt-3">or drop a folder anywhere on this window</p>
           </div>
         )}
 
 
         {!isLoading && hasAny && (
           <>
-
-            <div className="grid grid-cols-4 gap-3 mb-5">
-
-
-              <div className="relative overflow-hidden rounded-xl border border-border/40 bg-card p-4 flex flex-col justify-between">
-                <div className="absolute top-0 inset-x-0 h-[2px] rounded-t-xl bg-emerald-500/50" />
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-widest">Active</span>
-                  <Zap size={12} className="text-emerald-400/50" />
-                </div>
-                <span className="text-4xl font-bold text-emerald-400/90 leading-none tabular-nums">
-                  {activeCount}
-                </span>
-                <span className="text-[11px] text-muted-foreground/35 mt-2">
-                  {activeCount === 1 ? 'folder watching' : 'folders watching'}
-                </span>
-              </div>
-
-
-              <div className="relative overflow-hidden rounded-xl border border-border/40 bg-card p-4 flex flex-col justify-between">
-                <div className={`absolute top-0 inset-x-0 h-[2px] rounded-t-xl transition-colors ${pausedCount > 0 ? 'bg-amber-400/50' : 'bg-border/30'}`} />
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-widest">Paused</span>
-                  <PauseCircle size={12} className={pausedCount > 0 ? 'text-amber-400/60' : 'text-muted-foreground/20'} />
-                </div>
-                <span className={`text-4xl font-bold leading-none tabular-nums ${pausedCount > 0 ? 'text-amber-400/90' : 'text-foreground/20'}`}>
-                  {pausedCount}
-                </span>
-                <span className="text-[11px] text-muted-foreground/35 mt-2">
-                  {pausedCount === 1 ? 'folder paused' : 'folders paused'}
-                </span>
-              </div>
-
-
-              <div className="col-span-2 relative overflow-hidden rounded-xl border border-emerald-500/15 bg-emerald-500/[0.025] p-4 flex items-center gap-4">
-                <div className="absolute top-0 inset-x-0 h-[2px] rounded-t-xl bg-emerald-500/25" />
-
-
-                <div className="relative shrink-0">
-                  <div className="w-11 h-11 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_theme(colors.emerald.500)]" />
-                  </div>
-                  <div className="absolute inset-0 rounded-full border border-emerald-500/20 animate-ping opacity-40" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-emerald-400/90 leading-none mb-1.5">
-                    Snapshot Engine Running
-                  </p>
-                  <p className="text-[11px] text-muted-foreground/40 leading-relaxed">
-                    {totalCount} folder{totalCount !== 1 ? 's' : ''} protected
-                    &nbsp;·&nbsp; changes captured automatically
-                  </p>
-                </div>
-
-                <Activity size={48} className="shrink-0 text-emerald-500/6 -mr-1" />
-              </div>
-            </div>
-
 
             <div className="space-y-2.5">
               {folders!.map((f, i) => (

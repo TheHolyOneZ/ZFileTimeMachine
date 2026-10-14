@@ -34,7 +34,7 @@ export function IgnoreRulesEditor({ globs, onChange }: Props) {
               {g}
               <button
                 onClick={() => remove(g)}
-                className="text-muted-foreground/40 hover:text-destructive transition-colors ml-0.5"
+                className="text-muted-foreground/70 hover:text-destructive transition-colors ml-0.5"
                 title={`Remove ${g}`}
               >
                 <X size={10} />
@@ -55,7 +55,7 @@ export function IgnoreRulesEditor({ globs, onChange }: Props) {
           placeholder="e.g. node_modules/ or *.tmp"
           className="flex-1 bg-secondary/60 border border-border rounded-lg px-3 py-1.5 text-sm font-mono
                      focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50
-                     placeholder:text-muted-foreground/40 transition-colors"
+                     placeholder:text-muted-foreground/70 transition-colors"
         />
         <button
           onClick={add}
@@ -68,7 +68,7 @@ export function IgnoreRulesEditor({ globs, onChange }: Props) {
           Add
         </button>
       </div>
-      <p className="text-[10px] text-muted-foreground/40 mt-1.5">
+      <p className="text-[10px] text-muted-foreground/70 mt-1.5">
         Prefix with <code className="font-mono bg-secondary/40 px-1 rounded">!</code> to un-ignore a pattern (e.g. <code className="font-mono bg-secondary/40 px-1 rounded">!important.log</code>)
       </p>
     </div>

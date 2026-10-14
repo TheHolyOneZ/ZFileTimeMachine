@@ -141,7 +141,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
   const lines   = diff.lines.slice(0, maxLines);
 
   return (
-    <div className="rounded-xl border border-border/60 overflow-hidden bg-card/98 backdrop-blur-sm
+    <div className="rounded-xl border border-border/60 overflow-hidden bg-popover backdrop-blur-sm
                     shadow-[0_4px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.03)]">
 
 
@@ -150,7 +150,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
         {added   > 0 && <span className="text-emerald-400 font-mono text-xs font-semibold">+{added}</span>}
         {removed > 0 && <span className="text-red-400 font-mono text-xs font-semibold">−{removed}</span>}
         {added === 0 && removed === 0 && (
-          <span className="text-muted-foreground/40 font-mono text-xs">±0</span>
+          <span className="text-muted-foreground/70 font-mono text-xs">±0</span>
         )}
 
         <div className="flex-1" />
@@ -159,7 +159,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
         {!findOpen ? (
           <button
             onClick={() => setFindOpen(true)}
-            className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-foreground
+            className="flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-foreground
                        transition-colors px-1.5 py-0.5 rounded hover:bg-secondary"
             title="Find (Ctrl+F)"
           >
@@ -179,7 +179,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
                   if (e.key === 'Enter') e.shiftKey ? prevMatch() : nextMatch();
                 }}
                 placeholder="Find in diff…"
-                className="bg-transparent text-xs w-40 focus:outline-none placeholder:text-muted-foreground/30"
+                className="bg-transparent text-xs w-40 focus:outline-none placeholder:text-muted-foreground/60"
               />
               <button
                 onClick={() => setUseRegex((v) => !v)}
@@ -195,7 +195,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
               </span>
             )}
             {query && matchingLines.length === 0 && !regexError && (
-              <span className="text-[10px] text-muted-foreground/40">no matches</span>
+              <span className="text-[10px] text-muted-foreground/70">no matches</span>
             )}
             <button onClick={prevMatch} disabled={matchingLines.length === 0}
               className="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-30 transition-colors">
@@ -228,7 +228,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
                   : isIns   ? 'bg-emerald-950/40'
                   : isDel   ? 'bg-red-950/40'
                   : '';
-                const fg = isIns ? 'text-emerald-300' : isDel ? 'text-red-300' : 'text-muted-foreground/55';
+                const fg = isIns ? 'text-emerald-300' : isDel ? 'text-red-300' : 'text-muted-foreground';
                 const prefix = isIns ? '+' : isDel ? '−' : ' ';
                 const lineNum = line.new_lineno ?? line.old_lineno ?? '';
                 return (
@@ -237,7 +237,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
                     ref={(el) => { if (el) rowRefs.current.set(i, el); else rowRefs.current.delete(i); }}
                     className={`leading-5 ${bg} ${isMatch && !isActive ? 'outline outline-1 outline-yellow-500/20' : ''}`}
                   >
-                    <td className="pl-3 pr-3 select-none text-muted-foreground/25 w-10 text-right tabular-nums">
+                    <td className="pl-3 pr-3 select-none text-muted-foreground/50 w-10 text-right tabular-nums">
                       {lineNum}
                     </td>
                     <td className={`px-1 select-none w-4 font-bold opacity-55 ${fg}`}>{prefix}</td>
@@ -251,7 +251,7 @@ export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Prop
       </div>
 
       {diff.lines.length > maxLines && (
-        <p className="text-xs text-muted-foreground/40 px-4 py-1.5 border-t border-border/50 bg-secondary/20">
+        <p className="text-xs text-muted-foreground/70 px-4 py-1.5 border-t border-border/50 bg-secondary/20">
           +{diff.lines.length - maxLines} more lines
         </p>
       )}

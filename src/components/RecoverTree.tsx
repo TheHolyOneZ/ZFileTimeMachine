@@ -104,7 +104,7 @@ function NodeRow({ node, depth, selected, expanded, dirIdx, selectedFile, fileSn
                       ? 'bg-primary/10 border border-primary/20'
                       : isSelected && !isDir
                         ? 'bg-primary/5 border border-transparent hover:bg-primary/8'
-                        : 'border border-transparent hover:bg-white/4'
+                        : 'border border-transparent hover:bg-foreground/4'
                     }`}
         style={{ paddingLeft: `${10 + depth * 18}px`, paddingRight: '8px' }}
         onClick={() => isDir ? onToggleExpand(node.path) : onSelectFile(node.path)}
@@ -119,14 +119,14 @@ function NodeRow({ node, depth, selected, expanded, dirIdx, selectedFile, fileSn
 
         {isDir ? (
           <>
-            <ChevronRight size={11} className={`text-muted-foreground/40 shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
+            <ChevronRight size={11} className={`text-muted-foreground/70 shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
             {isExpanded
               ? <FolderOpen size={13} className="text-primary/70 shrink-0" />
-              : <FolderIcon size={13} className="text-muted-foreground/40 shrink-0" />
+              : <FolderIcon size={13} className="text-muted-foreground/70 shrink-0" />
             }
           </>
         ) : (
-          <FileText size={12} className={`shrink-0 ml-[15px] transition-colors ${isActiveFile ? 'text-primary/70' : isSelected ? 'text-primary/40' : 'text-muted-foreground/30'}`} />
+          <FileText size={12} className={`shrink-0 ml-[15px] transition-colors ${isActiveFile ? 'text-primary/70' : isSelected ? 'text-primary/40' : 'text-muted-foreground/60'}`} />
         )}
 
 
@@ -191,7 +191,7 @@ export function RecoverTree({ files, selected, onToggleFile, onToggleDir, filter
 
   if (tree.children.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-32 gap-2 text-xs text-muted-foreground/30">
+      <div className="flex flex-col items-center justify-center h-32 gap-2 text-xs text-muted-foreground/60">
         <FolderIcon size={24} className="opacity-20" />
         {filter ? 'No files match.' : 'No files in this folder.'}
       </div>

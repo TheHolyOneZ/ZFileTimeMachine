@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Trash2, Loader2, FolderOpen, Settings2, PauseCircle, PlayCircle,
-  Clock, Repeat2, History, ShieldCheck, ChevronRight,
+  History, ChevronRight,
 } from 'lucide-react';
 import { FolderIcon } from './FolderIcon';
 import { formatDistanceToNow } from 'date-fns';
@@ -11,6 +12,7 @@ import { getColor } from '@/lib/folderAppearance';
 import { formatPath } from '@/lib/tauri';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { ContextMenu } from './ContextMenu';
+import { ConfirmDialog } from './ConfirmDialog';
 import { useToast } from '@/context/ToastContext';
 
 interface Props {
@@ -21,16 +23,16 @@ function triggerLabel(folder: Folder): string {
   const t = folder.config.trigger;
   if (t.type === 'OnChange')  return 'On save';
   if (t.type === 'Manual')    return 'Manual';
-  if (t.type === 'Interval')  return `Every ${t.minutes}m`;
+  if (t.type === 'Interval')  return `Every ${t.minutes} min`;
   if (t.type === 'Hybrid')    return 'Hybrid';
   return 'Unknown';
 }
 
 function retentionLabel(folder: Folder): string {
   const r = folder.config.retention;
-  if (r.type === 'KeepLast')   return `Last ${r.count}`;
-  if (r.type === 'TimeBased')  return `${r.days}d`;
-  if (r.type === 'Hybrid')     return `${r.days}d / ${r.count}`;
+  if (r.type === 'KeepLast')   return `Keeps last ${r.count}`;
+  if (r.type === 'TimeBased')  return `Keeps ${r.days} days`;
+  if (r.type === 'Hybrid')     return `Keeps ${r.days} days / ${r.count}`;
   return '';
 }
 
@@ -46,19 +48,23 @@ export function FolderCard({ folder }: Props) {
   const isRemoving = remove.isPending && remove.variables === folder.id;
   const colorDef = getColor(folder.config.color);
   const isPaused = folder.paused;
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  function doRemove() {
+    setConfirmRemove(false);
+    remove.mutate(folder.id, {
+      onSuccess: () => {
+        toast('info', `"${folder.displayName}" removed.`, {
+          action: { label: 'Undo', onClick: () => undelete.mutate(folder.id) },
+          duration: 8000,
+        });
+      },
+    });
+  }
 
   function handleRemove(e: React.MouseEvent) {
     e.stopPropagation();
-    if (confirm(`Stop watching "${folder.displayName}"?\n\nHistory is preserved for 7 days — you can undo this action.`)) {
-      remove.mutate(folder.id, {
-        onSuccess: () => {
-          toast('info', `"${folder.displayName}" removed.`, {
-            action: { label: 'Undo', onClick: () => undelete.mutate(folder.id) },
-            duration: 8000,
-          });
-        },
-      });
-    }
+    setConfirmRemove(true);
   }
 
   return (
@@ -77,44 +83,26 @@ export function FolderCard({ folder }: Props) {
           icon: isPaused ? <PlayCircle size={12} /> : <PauseCircle size={12} />,
           onClick: () => togglePause.mutate({ id: folder.id, paused: !isPaused }),
         },
-        { label: 'Remove folder', icon: <Trash2 size={12} />, variant: 'destructive', separator: true, onClick: () => {
-          if (confirm(`Stop watching "${folder.displayName}"?\n\nHistory is preserved for 7 days — you can undo this action.`)) {
-            remove.mutate(folder.id, {
-              onSuccess: () => {
-                toast('info', `"${folder.displayName}" removed.`, {
-                  action: { label: 'Undo', onClick: () => undelete.mutate(folder.id) },
-                  duration: 8000,
-                });
-              },
-            });
-          }
-        }},
+        { label: 'Remove folder', icon: <Trash2 size={12} />, variant: 'destructive', separator: true, onClick: () => setConfirmRemove(true) },
       ])}
-      className={`group relative flex items-stretch gap-0 rounded-xl border bg-card
+      className={`group relative flex items-stretch rounded-xl border bg-card shadow-card
                   cursor-pointer select-none overflow-hidden
-                  transition-all duration-200
-                  border-border/50 hover:border-border/80
-                  hover:-translate-y-px hover:shadow-lg hover:shadow-black/20
+                  transition-[box-shadow,border-color,background-color] duration-200
+                  border-border/70 hover:border-foreground/[0.12] hover:shadow-card-hover
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
                   ${isRemoving ? 'opacity-40 pointer-events-none' : ''}`}
     >
-
-      <div
-        className={`w-[3px] shrink-0 rounded-l-xl ${colorDef.barClass}
-                    opacity-30 group-hover:opacity-100 transition-opacity duration-200`}
-      />
-
 
       <div className="flex-1 flex items-center gap-4 px-4 py-4 min-w-0">
 
 
         <div className="relative shrink-0">
-          <div className={`w-11 h-11 rounded-xl ${colorDef.bgClass} flex items-center justify-center`}>
+          <div className={`w-11 h-11 rounded-xl ${colorDef.bgClass} ring-1 ring-inset ring-foreground/[0.06] flex items-center justify-center`}>
             <FolderIcon name={folder.config.icon} size={20} className={colorDef.iconClass} />
           </div>
           <span
-            className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-card
-                        ${isPaused ? 'bg-amber-400' : 'bg-emerald-500 shadow-[0_0_6px_theme(colors.emerald.500)]'}`}
+            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card
+                        ${isPaused ? 'bg-amber-400' : 'bg-emerald-500'}`}
             title={isPaused ? 'Watcher paused' : 'Watcher active'}
           />
         </div>
@@ -126,38 +114,25 @@ export function FolderCard({ folder }: Props) {
             <span className="font-semibold text-[15px] text-foreground truncate leading-tight">
               {folder.displayName}
             </span>
-            <span
-              className={`shrink-0 text-[10px] px-1.5 py-px rounded-md font-medium
-                          ${isPaused
-                            ? 'bg-amber-500/10 text-amber-400/90 border border-amber-500/20'
-                            : 'bg-emerald-500/10 text-emerald-400/90 border border-emerald-500/15'
-                          }`}
-            >
-              {isPaused ? 'Paused' : 'Watching'}
-            </span>
+            {isPaused && (
+              <span className="shrink-0 text-[11px] px-1.5 rounded font-medium bg-amber-500/10 text-amber-400">
+                Paused
+              </span>
+            )}
           </div>
 
 
-          <span className="text-[11px] text-muted-foreground/45 font-mono truncate leading-none">
+          <span className="text-xs text-muted-foreground/80 font-mono truncate leading-none" title={folder.path}>
             {formatPath(folder.path)}
           </span>
 
 
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground/35">
-              <Repeat2 size={9} className="shrink-0" />
-              {triggerLabel(folder)}
-            </span>
-            <span className="text-muted-foreground/20 text-[10px]">·</span>
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground/35">
-              <ShieldCheck size={9} className="shrink-0" />
-              {retentionLabel(folder)}
-            </span>
-            <span className="text-muted-foreground/20 text-[10px]">·</span>
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground/30">
-              <Clock size={9} className="shrink-0" />
-              {ago}
-            </span>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{triggerLabel(folder)}</span>
+            <span aria-hidden className="text-muted-foreground/40">·</span>
+            <span>{retentionLabel(folder)}</span>
+            <span aria-hidden className="text-muted-foreground/40">·</span>
+            <span>Added {ago}</span>
           </div>
         </div>
 
@@ -165,8 +140,8 @@ export function FolderCard({ folder }: Props) {
         <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/folder/${folder.id}/recover`); }}
-            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground/50 hover:text-primary hover:bg-primary/10
+            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
+                       text-muted-foreground hover:text-primary hover:bg-primary/10
                        transition-all"
             title="Recover files"
           >
@@ -175,8 +150,8 @@ export function FolderCard({ folder }: Props) {
 
           <button
             onClick={(e) => { e.stopPropagation(); navigate(`/folder/${folder.id}/settings`); }}
-            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground/50 hover:text-foreground hover:bg-secondary/60
+            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
+                       text-muted-foreground hover:text-foreground hover:bg-secondary/60
                        transition-all"
             title="Folder settings"
           >
@@ -189,8 +164,8 @@ export function FolderCard({ folder }: Props) {
               togglePause.mutate({ id: folder.id, paused: !isPaused });
             }}
             disabled={togglePause.isPending}
-            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground/50 hover:text-amber-400 hover:bg-amber-400/10
+            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
+                       text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10
                        disabled:opacity-30 transition-all"
             title={isPaused ? 'Resume watching' : 'Pause watching'}
           >
@@ -200,8 +175,8 @@ export function FolderCard({ folder }: Props) {
           <button
             onClick={handleRemove}
             disabled={remove.isPending}
-            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10
+            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
+                       text-muted-foreground hover:text-destructive hover:bg-destructive/10
                        disabled:opacity-30 disabled:cursor-not-allowed transition-all"
             title="Remove folder"
           >
@@ -214,12 +189,23 @@ export function FolderCard({ folder }: Props) {
 
           <ChevronRight
             size={14}
-            className="text-muted-foreground/20 group-hover:text-muted-foreground/50 group-hover:translate-x-0.5 transition-all ml-1"
+            className="text-muted-foreground/50 group-hover:text-muted-foreground/50 group-hover:translate-x-0.5 transition-all ml-1"
           />
         </div>
       </div>
     </div>
     {menu && <ContextMenu {...menu} onClose={close} />}
+    {confirmRemove && (
+      <ConfirmDialog
+        title={`Stop watching "${folder.displayName}"?`}
+        confirmLabel="Stop watching"
+        destructive
+        onConfirm={doRemove}
+        onCancel={() => setConfirmRemove(false)}
+      >
+        Its history is kept for 7 days, so you can undo this.
+      </ConfirmDialog>
+    )}
     </>
   );
 }

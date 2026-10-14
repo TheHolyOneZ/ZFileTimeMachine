@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  ArrowLeft, Save, Trash2, Loader2, Globe, Sparkles, Palette,
+  ArrowLeft, Save, Trash2, Loader2, Sparkles, Palette,
   HardDrive, Wrench, ShieldCheck, Filter, Sun, Moon, Database,
   CheckCircle2, XCircle, Zap, FlaskConical, RefreshCw, ScanSearch,
   MonitorDot, PowerOff, XSquare,
@@ -29,7 +29,7 @@ function FieldLabel({
 }) {
   return (
     <div className="flex items-center gap-1 mb-1.5">
-      <label className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
+      <label className="text-[13px] font-medium text-foreground/90">
         {children}
       </label>
       {tooltip && <InfoTooltip title={tooltip.title} body={tooltip.body} />}
@@ -56,7 +56,7 @@ function NumberInput({
       placeholder={placeholder}
       className={`[appearance:none] bg-secondary/60 border border-border rounded-lg px-3 py-1.5 text-sm
                   focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50
-                  transition-colors placeholder:text-muted-foreground/40 ${className}`}
+                  transition-colors placeholder:text-muted-foreground/70 ${className}`}
     />
   );
 }
@@ -69,16 +69,14 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs transition-all text-left relative overflow-hidden
+      aria-current={active ? 'page' : undefined}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors text-left relative
         ${active
-          ? 'bg-primary/12 text-primary font-medium'
-          : 'text-muted-foreground/55 hover:bg-secondary/60 hover:text-foreground'
+          ? 'bg-foreground/[0.07] text-foreground font-medium shadow-[inset_0_1px_0_0_hsl(var(--highlight))]'
+          : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
         }`}
     >
-      {active && (
-        <span className="absolute left-0 top-2 bottom-2 w-[2.5px] rounded-full bg-primary" />
-      )}
-      <span className={`shrink-0 ml-0.5 transition-opacity ${active ? 'opacity-100' : 'opacity-55'}`}>
+      <span className={`shrink-0 ${active ? 'text-primary' : ''}`}>
         {icon}
       </span>
       {label}
@@ -96,12 +94,12 @@ function SettingsCard({
   divided?: boolean;
 }) {
   return (
-    <div className="bg-card/60 border border-border/50 rounded-xl overflow-hidden shadow-sm">
-      <div className={divided ? 'divide-y divide-border/25' : 'p-5 space-y-5'}>
+    <div className="bg-card border border-border/70 rounded-xl overflow-hidden shadow-card">
+      <div className={divided ? 'divide-y divide-border/70' : 'p-5 space-y-5'}>
         {children}
       </div>
       {footer && (
-        <div className="px-5 py-3.5 border-t border-border/40 bg-secondary/10 flex items-center gap-3">
+        <div className="px-5 py-3 border-t border-border/70 bg-foreground/[0.015] flex items-center gap-3">
           {footer}
         </div>
       )}
@@ -114,7 +112,7 @@ function SaveBtn({ onClick, pending }: { onClick: () => void; pending: boolean }
     <button
       onClick={onClick}
       disabled={pending}
-      className="flex items-center gap-2 px-4 py-1.5 text-sm rounded-lg bg-primary text-primary-foreground
+      className="flex items-center gap-2 px-4 py-1.5 text-sm rounded-lg bg-primary text-primary-foreground shadow-button
                  hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed
                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
     >
@@ -127,23 +125,16 @@ function SaveBtn({ onClick, pending }: { onClick: () => void; pending: boolean }
 function SectionHeader({
   title,
   subtitle,
-  icon,
 }: {
   title: string;
   subtitle: string;
+
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 mb-5">
-      {icon && (
-        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 text-primary/70">
-          {icon}
-        </div>
-      )}
-      <div>
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        <p className="text-xs text-muted-foreground/60 mt-0.5">{subtitle}</p>
-      </div>
+    <div className="mb-6">
+      <h2 className="text-lg font-semibold text-foreground tracking-tight">{title}</h2>
+      <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
     </div>
   );
 }
@@ -325,7 +316,7 @@ function GlobalSettingsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground/85">Minimize to tray on close</p>
-                  <p className="text-xs text-muted-foreground/55 mt-0.5 leading-relaxed max-w-sm">
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed max-w-sm">
                     When you click the window's × button, hide to the system tray instead of quitting.
                     Right-click the tray icon → <span className="font-mono text-[10px]">Quit ZFileTimeMachine</span> to fully exit.
                   </p>
@@ -351,7 +342,7 @@ function GlobalSettingsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground/85">Launch on system startup</p>
-                  <p className="text-xs text-muted-foreground/55 mt-0.5 leading-relaxed max-w-sm">
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed max-w-sm">
                     Register ZFileTimeMachine with your OS so it starts automatically on login.
                     The app will start <span className="text-foreground/70 font-medium">hidden in the tray</span> — watchers
                     run in the background without opening a window.
@@ -371,7 +362,7 @@ function GlobalSettingsPage() {
             </div>
           </SettingsCard>
 
-          <div className="mt-4 p-4 rounded-xl border border-border/30 bg-secondary/10 text-xs text-muted-foreground/55 space-y-1.5 leading-relaxed">
+          <div className="mt-4 p-4 rounded-xl border border-border/30 bg-secondary/10 text-xs text-muted-foreground space-y-1.5 leading-relaxed">
             <p className="font-semibold text-muted-foreground/70">How the tray icon works</p>
             <p>The tray icon is always visible while ZFileTimeMachine is running. Left-click it (or use <span className="font-mono text-[10px]">Open ZFileTimeMachine</span>) to bring the window back. File watchers keep running even while the window is hidden.</p>
             <p>On <span className="font-medium">Linux</span> startup uses XDG autostart (<code className="font-mono text-[10px]">~/.config/autostart/</code>). On <span className="font-medium">Windows</span> it writes to the registry Run key. On <span className="font-medium">macOS</span> a LaunchAgent plist is created.</p>
@@ -397,21 +388,21 @@ function GlobalSettingsPage() {
           {dedupStats && (
             <div className="grid grid-cols-3 gap-3 mb-5">
               <div className="rounded-xl border border-border/40 bg-secondary/20 p-3.5 flex flex-col">
-                <p className="text-[10px] font-medium text-muted-foreground/45 uppercase tracking-widest mb-2">On Disk</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">On disk</p>
                 <p className="text-2xl font-bold text-foreground/90 tabular-nums leading-none">
                   {(dedupStats.physicalBytes / 1024 / 1024).toFixed(1)}
                 </p>
-                <p className="text-[11px] text-muted-foreground/40 mt-1.5">MB physical</p>
+                <p className="text-[11px] text-muted-foreground/70 mt-1.5">MB physical</p>
               </div>
               <div className="rounded-xl border border-border/40 bg-secondary/20 p-3.5 flex flex-col">
-                <p className="text-[10px] font-medium text-muted-foreground/45 uppercase tracking-widest mb-2">Logical</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Logical</p>
                 <p className="text-2xl font-bold text-foreground/40 tabular-nums leading-none">
                   {(dedupStats.logicalBytes / 1024 / 1024).toFixed(1)}
                 </p>
-                <p className="text-[11px] text-muted-foreground/40 mt-1.5">MB without dedup</p>
+                <p className="text-[11px] text-muted-foreground/70 mt-1.5">MB without dedup</p>
               </div>
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3.5 flex flex-col">
-                <p className="text-[10px] font-medium text-emerald-400/50 uppercase tracking-widest mb-2">Saved</p>
+                <p className="text-xs font-medium text-emerald-400/50 mb-2">Saved</p>
                 <p className="text-2xl font-bold text-emerald-400/90 tabular-nums leading-none">
                   {(dedupStats.savedBytes / 1024 / 1024).toFixed(1)}
                 </p>
@@ -452,7 +443,7 @@ function GlobalSettingsPage() {
 
           <ActionCard
             icon={<RefreshCw size={15} />}
-            title="Garbage Collection"
+            title="Garbage collection"
             description="Removes orphaned snapshot blobs that are no longer referenced by any snapshot record. Safe to run at any time."
             label="Run GC"
             runningLabel="Running…"
@@ -462,7 +453,7 @@ function GlobalSettingsPage() {
 
           <ActionCard
             icon={<Trash2 size={15} />}
-            title="Orphaned File Cleanup"
+            title="Orphaned file cleanup"
             description="Removes file records with no snapshots — left over after retention pruning. Does not touch actual files on disk."
             label="Clean up"
             runningLabel="Cleaning…"
@@ -472,9 +463,9 @@ function GlobalSettingsPage() {
 
           <ActionCard
             icon={<ScanSearch size={15} />}
-            title="Database Integrity Check"
+            title="Database integrity check"
             description="Runs SQLite PRAGMA integrity_check and verifies every snapshot's content blob exists on disk."
-            label="Run Check"
+            label="Run check"
             runningLabel="Checking…"
             running={integrityRunning}
             onClick={() => void checkIntegrity()}
@@ -594,14 +585,12 @@ function GlobalSettingsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="border-b border-border/60 px-5 py-3.5 flex items-center gap-3 shrink-0 bg-card/40">
-        <div className="w-6 h-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center">
-          <Globe size={13} className="text-primary/70" />
-        </div>
-        <h1 className="font-semibold text-sm">Global Settings</h1>
+      <div className="border-b border-border/70 px-5 py-3.5 flex items-center gap-3 shrink-0">
+        <h1 className="font-semibold text-sm">Settings</h1>
+        <span className="text-xs text-muted-foreground">Applies to the whole app</span>
       </div>
       <div className="flex-1 flex overflow-hidden">
-        <nav className="w-46 shrink-0 border-r border-border/40 p-2 space-y-0.5 bg-card/20">
+        <nav className="w-48 shrink-0 border-r border-border/70 p-2 space-y-0.5">
           {GLOBAL_SECTIONS.map((s) => (
             <NavItem key={s.id} icon={s.icon} label={s.label} active={activeSection === s.id} onClick={() => setActiveSection(s.id)} />
           ))}
@@ -650,7 +639,7 @@ function StorageBreakdownSection({ folderId }: { folderId: number }) {
         </div>
       )}
       {data && data.length === 0 && (
-        <p className="text-xs text-muted-foreground/40">No snapshot data found for this folder.</p>
+        <p className="text-xs text-muted-foreground/70">No snapshot data found for this folder.</p>
       )}
     </div>
   );
@@ -662,7 +651,7 @@ type FolderSection = 'appearance' | 'backup' | 'rules' | 'storage';
 const FOLDER_SECTIONS: { id: FolderSection; label: string; icon: React.ReactNode }[] = [
   { id: 'appearance', label: 'Appearance',  icon: <Palette size={13} /> },
   { id: 'backup',     label: 'Backup',       icon: <ShieldCheck size={13} /> },
-  { id: 'rules',      label: 'Ignore Rules', icon: <Filter size={13} /> },
+  { id: 'rules',      label: 'Ignore rules', icon: <Filter size={13} /> },
   { id: 'storage',    label: 'Storage',      icon: <Database size={13} /> },
 ];
 
@@ -765,7 +754,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
                       <p className={`text-sm font-semibold leading-none mb-1 ${isActive ? pd.iconClass : 'text-foreground/80'}`}>
                         {preset.label}
                       </p>
-                      <p className="text-[10px] text-muted-foreground/45 leading-relaxed">{preset.hint}</p>
+                      <p className="text-[10px] text-muted-foreground/70 leading-relaxed">{preset.hint}</p>
                     </button>
                   );
                 })}
@@ -782,7 +771,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
                 placeholder="Folder name"
                 className="bg-secondary/60 border border-border rounded-lg px-3 py-2 text-sm w-full
                            focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50
-                           transition-colors placeholder:text-muted-foreground/40"
+                           transition-colors placeholder:text-muted-foreground/70"
               />
             </div>
 
@@ -792,7 +781,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <FieldLabel>Accent color</FieldLabel>
-                  <span className="text-[11px] text-muted-foreground/40">{selectedColorLabel}</span>
+                  <span className="text-[11px] text-muted-foreground/70">{selectedColorLabel}</span>
                 </div>
                 <div className="flex flex-wrap gap-2.5">
                   {FOLDER_COLORS.map((c) => (
@@ -803,7 +792,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
                       onClick={() => setConfig({ ...config, color: c.id })}
                       className={`w-7 h-7 rounded-full ${c.swatch} transition-all
                                   ${config.color === c.id || (!config.color && c.id === 'blue')
-                                    ? 'ring-2 ring-offset-2 ring-offset-card ring-white/60 scale-110'
+                                    ? 'ring-2 ring-offset-2 ring-offset-card ring-foreground/60 scale-110'
                                     : 'opacity-55 hover:opacity-100 hover:scale-110'
                                   }`}
                     />
@@ -815,7 +804,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <FieldLabel>Icon</FieldLabel>
-                  <span className="text-[11px] text-muted-foreground/40">{selectedIcon}</span>
+                  <span className="text-[11px] text-muted-foreground/70">{selectedIcon}</span>
                 </div>
                 <div className="grid grid-cols-10 gap-1">
                   {FOLDER_ICON_NAMES.map((name) => {
@@ -829,7 +818,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
                         className={`p-2 rounded-lg transition-all ${
                           isActive
                             ? `${colorDef.bgClass} ${colorDef.iconClass} ring-1 ring-inset ring-current/25`
-                            : 'text-muted-foreground/40 hover:text-foreground/80 hover:bg-secondary/60'
+                            : 'text-muted-foreground/70 hover:text-foreground/80 hover:bg-secondary/60'
                         }`}
                       >
                         <FolderIcon name={name} size={17} />
@@ -843,9 +832,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
 
             <div className="p-5">
               <FieldLabel>Preview</FieldLabel>
-              <div className="relative flex items-stretch rounded-xl border border-border/50 bg-card/80 overflow-hidden mt-2">
-
-                <div className={`w-[3px] shrink-0 ${colorDef.barClass} opacity-80`} />
+              <div className="relative flex items-stretch rounded-xl border border-border/60 bg-card overflow-hidden mt-2">
 
                 <div className="flex items-center gap-4 px-4 py-4 flex-1 min-w-0">
 
@@ -853,7 +840,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
                     <div className={`w-11 h-11 rounded-xl ${colorDef.bgClass} flex items-center justify-center`}>
                       <FolderIcon name={config.icon} size={20} className={colorDef.iconClass} />
                     </div>
-                    <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-card bg-emerald-500 shadow-[0_0_5px_theme(colors.emerald.500)]" />
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card bg-emerald-500" />
                   </div>
 
                   <div className="flex-1 min-w-0 flex flex-col gap-1.5">
@@ -861,14 +848,11 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
                       <span className="font-semibold text-[15px] text-foreground truncate">
                         {displayName || folder?.displayName || 'Folder'}
                       </span>
-                      <span className="shrink-0 text-[10px] px-1.5 py-px rounded-md font-medium bg-emerald-500/10 text-emerald-400/90 border border-emerald-500/15">
-                        Watching
-                      </span>
                     </div>
-                    <span className="text-[11px] text-muted-foreground/40 font-mono truncate">
+                    <span className="text-xs text-muted-foreground/80 font-mono truncate">
                       {folder?.path ?? '/path/to/folder'}
                     </span>
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground/30">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span>{selectedColorLabel}</span>
                       <span>·</span>
                       <span>{selectedIcon}</span>
@@ -1042,7 +1026,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
                   />
                   <div className="w-8 h-[18px] rounded-full border border-border bg-secondary
                                   peer-checked:bg-primary peer-checked:border-primary transition-colors" />
-                  <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white/60
+                  <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-foreground/60
                                   peer-checked:translate-x-3.5 peer-checked:bg-white
                                   transition-transform shadow-sm" />
                 </div>
@@ -1061,7 +1045,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
         <div className="p-6 max-w-2xl animate-fade-in">
           <SectionHeader
             icon={<Filter size={15} />}
-            title="Ignore Rules"
+            title="Ignore rules"
             subtitle="Files and folders matching these patterns are completely skipped."
           />
           <SettingsCard footer={<SaveBtn onClick={() => void save()} pending={isPending} />}>
@@ -1114,7 +1098,7 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="border-b border-border/60 px-5 py-3.5 flex items-center gap-3 shrink-0 bg-card/40">
+      <div className="border-b border-border/70 px-5 py-3.5 flex items-center gap-3 shrink-0">
         <Link
           to={`/folder/${folderId}`}
           className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground
@@ -1128,14 +1112,18 @@ function FolderSettingsPage({ folderId }: { folderId: number }) {
             <FolderIcon name={config.icon} size={13} className={colorDef.iconClass} />
           </div>
         )}
-        <h1 className="font-semibold text-sm">{folder?.displayName}</h1>
-        <span className="text-[10px] text-muted-foreground/30 ml-1">settings</span>
-        <span className="ml-auto text-[11px] text-muted-foreground/40 font-mono truncate max-w-[200px]">
-          {folder?.path}
-        </span>
+        <div className="min-w-0">
+          <h1 className="font-semibold text-sm leading-tight truncate">
+            {folder?.displayName}
+            <span className="text-muted-foreground font-normal"> / Settings</span>
+          </h1>
+          <p className="text-[11px] text-muted-foreground/80 font-mono truncate mt-0.5 leading-tight" title={folder?.path}>
+            {folder?.path}
+          </p>
+        </div>
       </div>
       <div className="flex-1 flex overflow-hidden">
-        <nav className="w-46 shrink-0 border-r border-border/40 p-2 space-y-0.5 bg-card/20">
+        <nav className="w-48 shrink-0 border-r border-border/70 p-2 space-y-0.5">
           {FOLDER_SECTIONS.map((s) => (
             <NavItem key={s.id} icon={s.icon} label={s.label} active={activeSection === s.id} onClick={() => setActiveSection(s.id)} />
           ))}

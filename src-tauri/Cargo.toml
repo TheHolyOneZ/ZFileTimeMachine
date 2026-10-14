@@ -1,8 +1,12 @@
 [package]
 name = "zfiletimemachine"
-version = "0.0.1"
-description = "A local-first file version history tool"
-authors = []
+version = "0.2.0"
+description = "Automatic, private version history for any folder on your computer."
+authors = ["TheHolyOneZ"]
+license = "GPL-3.0-or-later"
+homepage = "https://zsync.eu/zftm/"
+repository = "https://github.com/TheHolyOneZ/ZFileTimeMachine"
+readme = "../README.md"
 edition = "2021"
 rust-version = "1.77"
 
@@ -59,8 +63,14 @@ zstd = "0.13"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+[target.'cfg(windows)'.dependencies]
+# Already in the tree via tao; used to enable the undecorated-window shadow only on Windows 11+.
+windows-version = "0.1"
+
 [dev-dependencies]
 tempfile = "3"
+# Mock runtime so watcher logic can be exercised in tests without opening a window.
+tauri = { version = "2", features = ["tray-icon", "test"] }
 
 [features]
 default = ["custom-protocol"]

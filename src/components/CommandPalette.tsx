@@ -47,13 +47,13 @@ export function CommandPalette({ open, onClose }: Props) {
   const commands: Command[] = [
     {
       id: 'settings',
-      label: 'Open Settings',
+      label: 'Open settings',
       icon: <Settings2 size={14} />,
       action: () => { navigate('/settings'); onClose(); },
     },
     {
       id: 'home',
-      label: 'Go to Folders',
+      label: 'Go to folders',
       icon: <Folder size={14} />,
       action: () => { navigate('/'); onClose(); },
     },
@@ -89,11 +89,11 @@ export function CommandPalette({ open, onClose }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4 bg-black/50 animate-fade-in"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-lg bg-card/98 backdrop-blur-sm border border-border/60 rounded-xl shadow-[0_16px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden"
+        className="w-full max-w-lg bg-popover backdrop-blur-sm border border-border/60 rounded-xl shadow-overlay overflow-hidden"
         onKeyDown={handleKeyDown}
       >
 
@@ -105,19 +105,19 @@ export function CommandPalette({ open, onClose }: Props) {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             placeholder="Search commands…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/40"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
           />
           {query && (
-            <button onClick={() => setQuery('')} className="text-muted-foreground/40 hover:text-foreground">
+            <button onClick={() => setQuery('')} className="text-muted-foreground/70 hover:text-foreground">
               <X size={14} />
             </button>
           )}
-          <kbd className="text-[10px] text-muted-foreground/40 border border-border/40 rounded px-1.5 py-0.5">Esc</kbd>
+          <kbd className="text-[10px] text-muted-foreground/70 border border-border/40 rounded px-1.5 py-0.5">Esc</kbd>
         </div>
 
         <div ref={listRef} className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (
-            <p className="text-xs text-muted-foreground/40 text-center py-8">No commands found</p>
+            <p className="text-xs text-muted-foreground/70 text-center py-8">No commands found</p>
           )}
           {filtered.map((cmd, i) => (
             <button
@@ -131,14 +131,14 @@ export function CommandPalette({ open, onClose }: Props) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground">{cmd.label}</p>
                 {cmd.description && (
-                  <p className="text-xs text-muted-foreground/40 truncate font-mono">{cmd.description}</p>
+                  <p className="text-xs text-muted-foreground/70 truncate font-mono">{cmd.description}</p>
                 )}
               </div>
             </button>
           ))}
         </div>
         <div className="px-4 py-2 border-t border-border/40 bg-secondary/20 flex items-center gap-3">
-          <span className="text-[10px] text-muted-foreground/40">
+          <span className="text-[10px] text-muted-foreground/70">
             <kbd className="border border-border/40 rounded px-1">↑↓</kbd> navigate
             <kbd className="border border-border/40 rounded px-1 ml-2">↵</kbd> select
           </span>

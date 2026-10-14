@@ -111,8 +111,8 @@ export function DevPanel() {
         </div>
         <button
           onClick={() => void start()}
-          className="flex items-center gap-2 px-5 py-2 text-sm rounded-lg bg-primary text-primary-foreground
-                     hover:bg-primary/90 shadow-[0_0_16px_rgba(var(--primary-rgb),0.25)]
+          className="flex items-center gap-2 px-5 py-2 text-sm rounded-lg bg-primary text-primary-foreground shadow-button
+                     hover:bg-primary/90
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
         >
           <Play size={14} />

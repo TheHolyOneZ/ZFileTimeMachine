@@ -21,6 +21,10 @@ export function onFileDeleted(cb: (p: FileDeletedPayload) => void): Promise<Unli
   return listen<FileDeletedPayload>('file:deleted', (e) => cb(e.payload));
 }
 
+export function onFileRestored(cb: (p: FileDeletedPayload) => void): Promise<UnlistenFn> {
+  return listen<FileDeletedPayload>('file:restored', (e) => cb(e.payload));
+}
+
 export function onFileRenamed(cb: (p: FileRenamedPayload) => void): Promise<UnlistenFn> {
   return listen<FileRenamedPayload>('file:renamed', (e) => cb(e.payload));
 }

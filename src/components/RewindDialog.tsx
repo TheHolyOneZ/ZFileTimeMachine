@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useState } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { RotateCcw, AlertTriangle, Loader2, X, Diff } from 'lucide-react';
@@ -36,14 +37,14 @@ export function RewindDialog({ snapshot, diff, onConfirm, onCancel, isPending }:
   const timeOnly = format(new Date(snapshot.createdAt), 'HH:mm:ss');
   const src = SOURCE_STYLES[snapshot.source] ?? 'bg-secondary text-muted-foreground border-border';
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+      className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-fade-in"
       onClick={(e) => e.target === e.currentTarget && !isPending && onCancel()}
     >
-      <div className="bg-card/98 border border-border/60 rounded-xl w-full max-w-2xl max-h-[88vh]
+      <div className="bg-popover border border-border/60 rounded-xl w-full max-w-2xl max-h-[88vh]
                       flex flex-col animate-scale-in overflow-hidden
-                      shadow-[0_24px_80px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04)]">
+                      shadow-overlay">
 
 
         <div className="flex items-center gap-3 px-5 py-3.5 bg-secondary/30 border-b border-border/50 shrink-0">
@@ -60,7 +61,7 @@ export function RewindDialog({ snapshot, diff, onConfirm, onCancel, isPending }:
           </span>
           <div className="ml-auto flex items-center gap-2">
             <RotateCcw size={13} className="text-primary/70" />
-            <span className="text-sm font-semibold text-foreground">Rewind File</span>
+            <span className="text-sm font-semibold text-foreground">Rewind file</span>
           </div>
           <button
             onClick={onCancel}
@@ -99,7 +100,7 @@ export function RewindDialog({ snapshot, diff, onConfirm, onCancel, isPending }:
               />
               <div className="w-8 h-[18px] rounded-full border border-border bg-secondary
                               peer-checked:bg-primary peer-checked:border-primary transition-colors" />
-              <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white/60
+              <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-foreground/60
                               peer-checked:translate-x-3.5 peer-checked:bg-white
                               transition-transform shadow-sm" />
             </div>
@@ -125,15 +126,15 @@ export function RewindDialog({ snapshot, diff, onConfirm, onCancel, isPending }:
           <button
             onClick={() => onConfirm(autoSave)}
             disabled={isPending}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground
-                       hover:bg-primary/90 disabled:opacity-50 transition-colors
-                       shadow-[0_0_16px_hsl(217_91%_60%/0.35)]"
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground shadow-button
+                       hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {isPending ? <Loader2 size={13} className="animate-spin-slow" /> : <RotateCcw size={13} />}
             {isPending ? 'Rewinding…' : 'Rewind to this version'}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

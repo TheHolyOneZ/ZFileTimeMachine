@@ -5317,7 +5317,7 @@ dependencies = [
 
 [[package]]
 name = "zfiletimemachine"
-version = "0.0.1"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -5340,6 +5340,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "windows-version",
  "zstd",
 ]
 

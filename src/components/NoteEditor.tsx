@@ -65,7 +65,7 @@ export function NoteEditor({ initialNote, onSave, placeholder = 'Add a note…' 
         className={`p-1 rounded transition-colors shrink-0 ${
           hasNote
             ? 'text-amber-400/80 hover:text-amber-300'
-            : 'text-muted-foreground/25 hover:text-muted-foreground/60'
+            : 'text-muted-foreground/50 hover:text-muted-foreground/60'
         }`}
         title={hasNote ? 'View / edit note' : 'Add note'}
       >
@@ -84,7 +84,7 @@ export function NoteEditor({ initialNote, onSave, placeholder = 'Add a note…' 
             maxHeight: pos.maxHeight,
             zIndex: 9999,
           }}
-          className="bg-card border border-border/70 rounded-xl shadow-2xl animate-scale-in overflow-hidden"
+          className="bg-card border border-border/70 rounded-xl shadow-overlay animate-scale-in overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
 
@@ -97,7 +97,7 @@ export function NoteEditor({ initialNote, onSave, placeholder = 'Add a note…' 
               {!editing && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-                  className="p-1 rounded hover:bg-secondary text-muted-foreground/40 hover:text-foreground transition-colors"
+                  className="p-1 rounded hover:bg-secondary text-muted-foreground/70 hover:text-foreground transition-colors"
                   title="Edit"
                 >
                   <Pencil size={10} />
@@ -105,7 +105,7 @@ export function NoteEditor({ initialNote, onSave, placeholder = 'Add a note…' 
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); close(); }}
-                className="p-1 rounded hover:bg-secondary text-muted-foreground/40 hover:text-foreground transition-colors"
+                className="p-1 rounded hover:bg-secondary text-muted-foreground/70 hover:text-foreground transition-colors"
               >
                 <X size={10} />
               </button>
@@ -127,7 +127,7 @@ export function NoteEditor({ initialNote, onSave, placeholder = 'Add a note…' 
                   placeholder={placeholder}
                   className="w-full bg-secondary/40 border border-border/40 rounded-lg px-2.5 py-2 text-xs
                              focus:outline-none focus:ring-1 focus:ring-amber-500/40 resize-none
-                             placeholder:text-muted-foreground/30 text-foreground/90 transition-colors
+                             placeholder:text-muted-foreground/60 text-foreground/90 transition-colors
                              focus:border-amber-500/40"
                   rows={4}
                 />
@@ -147,7 +147,7 @@ export function NoteEditor({ initialNote, onSave, placeholder = 'Add a note…' 
                       Remove
                     </button>
                   )}
-                  <span className="ml-auto text-[10px] text-muted-foreground/30">Ctrl+↵</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground/60">Ctrl+↵</span>
                 </div>
               </>
             ) : (

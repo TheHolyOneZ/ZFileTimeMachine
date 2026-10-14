@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
-import { FolderOpen, Settings, AlertTriangle } from 'lucide-react';
-import logoUrl from './assets/logo.png';
+import { FolderOpen, Settings, AlertTriangle, Info } from 'lucide-react';
+import { TitleBar } from './components/TitleBar';
 import { getPlatform } from './lib/tauri';
 import { Folders } from './routes/Folders';
 import { FolderDetail } from './routes/FolderDetail';
@@ -33,71 +33,46 @@ const queryClient = new QueryClient({
   },
 });
 
+const NAV_ITEMS = [
+  { to: '/', end: true, icon: FolderOpen, label: 'Folders' },
+  { to: '/settings', end: false, icon: Settings, label: 'Settings' },
+] as const;
+
+function SidebarLink({ to, end, icon: Icon, label, className = '' }: {
+  to: string; end?: boolean; icon: typeof FolderOpen; label: string; className?: string;
+}) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      title={label}
+      aria-label={label}
+      className={({ isActive }) =>
+        `relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${className} ${
+          isActive
+            ? 'bg-foreground/[0.08] text-foreground shadow-[inset_0_1px_0_0_hsl(var(--highlight))]'
+            : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon size={18} strokeWidth={1.75} />
+          {isActive && (
+            <span className="absolute -left-[10px] top-1/2 -translate-y-1/2 w-[3px] h-4 bg-primary rounded-r-full" />
+          )}
+        </>
+      )}
+    </NavLink>
+  );
+}
+
 function Sidebar() {
   return (
-    <nav className="w-14 flex flex-col items-center py-3 border-r border-border bg-card/80 backdrop-blur-sm shrink-0 gap-1">
-      <div className="mb-3 shrink-0 flex flex-col items-center gap-1">
-        <img src={logoUrl} alt="ZFileTimeMachine" className="w-8 h-8 rounded-lg object-cover" />
-        <span className="text-[8px] font-bold tracking-widest text-amber-400/60 uppercase leading-none">BETA</span>
-      </div>
+    <nav aria-label="Main" className="w-12 flex flex-col items-center pt-2 pb-3 bg-chrome shrink-0 gap-1">
+      {NAV_ITEMS.map((item) => <SidebarLink key={item.to} {...item} />)}
 
-      <NavLink
-        to="/"
-        end
-        className={({ isActive }) =>
-          `relative p-2.5 rounded-lg transition-all ${
-            isActive
-              ? 'bg-primary/20 text-primary shadow-[0_0_12px_hsl(217_91%_60%/0.2)]'
-              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`
-        }
-        title="Folders"
-      >
-        {({ isActive }) => (
-          <>
-            <FolderOpen size={20} />
-            {isActive && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full" />
-            )}
-          </>
-        )}
-      </NavLink>
-
-      <NavLink
-        to="/settings"
-        className={({ isActive }) =>
-          `relative p-2.5 rounded-lg transition-all ${
-            isActive
-              ? 'bg-primary/20 text-primary shadow-[0_0_12px_hsl(217_91%_60%/0.2)]'
-              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`
-        }
-        title="Global settings"
-      >
-        {({ isActive }) => (
-          <>
-            <Settings size={20} />
-            {isActive && (
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full" />
-            )}
-          </>
-        )}
-      </NavLink>
-
-
-      <NavLink
-        to="/about"
-        className={({ isActive }) =>
-          `mt-auto relative flex items-center justify-center w-9 h-9 rounded-full transition-all ${
-            isActive
-              ? 'bg-violet-500/20 text-violet-300 shadow-[0_0_16px_rgba(139,92,246,0.45)] ring-1 ring-violet-500/30'
-              : 'bg-secondary/40 text-muted-foreground/50 ring-1 ring-border/40 hover:text-foreground hover:ring-violet-500/25 hover:shadow-[0_0_10px_rgba(139,92,246,0.22)]'
-          }`
-        }
-        title="About"
-      >
-        <span className="text-sm font-bold select-none">A</span>
-      </NavLink>
+      <SidebarLink to="/about" icon={Info} label="About" className="mt-auto" />
     </nav>
   );
 }
@@ -155,11 +130,13 @@ function AppShell() {
 
   return (
     <OnboardingContext.Provider value={{ resetGuide }}>
-      <div className="flex flex-col h-screen overflow-hidden">
+      <div className="flex flex-col h-screen overflow-hidden bg-chrome">
+        <TitleBar onOpenSearch={() => setCmdPalette(true)} />
         {showMacWarning && <MacOsWarningBanner onDismiss={dismissMacWarning} />}
         <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 flex overflow-hidden">
+        <main className="relative flex-1 flex overflow-hidden bg-background rounded-tl-xl border-l border-t border-border
+                         shadow-[inset_0_1px_0_0_hsl(var(--highlight))]">
           <ErrorBoundary label="App">
             <Routes>
               <Route path="/" element={<Folders />} />

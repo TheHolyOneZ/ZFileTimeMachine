@@ -1,14 +1,16 @@
+use std::path::Path;
 use rusqlite::Connection;
 use crate::db::repo;
 use crate::error::AppError;
 use crate::events::{emit_file_renamed, FileRenamed};
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 
 
-pub fn detect_and_handle(
+pub fn detect_and_handle<R: Runtime>(
     conn: &Connection,
-    app: &AppHandle,
+    app: &AppHandle<R>,
     folder_id: i64,
+    root: &Path,
     new_rel_path: &str,
     hash: &str,
 ) -> Result<bool, AppError> {
@@ -17,6 +19,14 @@ pub fn detect_and_handle(
 
 
     if file.folder_id != folder_id || file.rel_path == new_rel_path {
+        return Ok(false);
+    }
+
+
+    if root.join(&file.rel_path).exists() {
+        return Ok(false);
+    }
+    if repo::get_file_by_path(conn, folder_id, new_rel_path)?.is_some() {
         return Ok(false);
     }
 

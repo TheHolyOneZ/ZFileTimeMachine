@@ -124,7 +124,7 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
           </span>
           <Icon size={13} className={`shrink-0 ${file.isBinary ? 'text-amber-400/70' : 'text-primary/70'}`} />
           <span className="text-sm flex-1 min-w-0 truncate">
-            {dir && <span className="text-muted-foreground/40 text-xs">{dir}</span>}
+            {dir && <span className="text-muted-foreground/70 text-xs">{dir}</span>}
             <span className="text-foreground/90">{name}</span>
           </span>
         </button>
@@ -140,7 +140,7 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
             className={`p-1 rounded transition-colors shrink-0 ${
               file.noAutoSnapshot
                 ? 'text-amber-400/80 hover:text-amber-300'
-                : 'opacity-0 group-hover:opacity-100 text-muted-foreground/30 hover:text-muted-foreground/70'
+                : 'opacity-0 group-hover:opacity-100 text-muted-foreground/60 hover:text-muted-foreground/70'
             }`}
             title={file.noAutoSnapshot ? 'Manual-only mode — click to re-enable auto-snapshots' : 'Pause auto-snapshots (manual only)'}
           >
@@ -175,7 +175,7 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
           <CopyBtn text={file.relPath} />
           <span
             className={`text-[10px] font-mono shrink-0 ${
-              file.snapshotCount > 0 ? 'text-muted-foreground/70' : 'text-muted-foreground/40'
+              file.snapshotCount > 0 ? 'text-muted-foreground/70' : 'text-muted-foreground/70'
             }`}
             title={`${file.snapshotCount} snapshot${file.snapshotCount !== 1 ? 's' : ''}`}
           >
@@ -183,7 +183,7 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
           </span>
           {file.lastSnapshotAt != null && (
             <span
-              className="text-[10px] text-muted-foreground/35 shrink-0 hidden group-hover:inline"
+              className="text-[10px] text-muted-foreground/60 shrink-0 hidden group-hover:inline"
               title={new Date(file.lastSnapshotAt).toLocaleString()}
             >
               {formatDistanceToNow(new Date(file.lastSnapshotAt), { addSuffix: true })}
@@ -195,7 +195,7 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
             </span>
           )}
           {!open && !snapshots && (
-            <Clock size={10} className="text-muted-foreground/30 shrink-0" />
+            <Clock size={10} className="text-muted-foreground/60 shrink-0" />
           )}
         </div>
       </div>
@@ -205,7 +205,7 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
           {snapshots && snapshots.length > 0 && (
             <div className="px-4 pt-2.5 pb-1">
               <div className="relative">
-                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/30 pointer-events-none" />
+                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
                 <input
                   type="text"
                   value={snapSearch}
@@ -213,12 +213,12 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
                   placeholder="Search snapshot notes…"
                   className="w-full bg-secondary/30 border border-border/30 rounded-lg pl-7 pr-7 py-1.5 text-xs
                              focus:outline-none focus:ring-1 focus:ring-amber-500/30 focus:border-amber-500/30
-                             placeholder:text-muted-foreground/25 transition-colors"
+                             placeholder:text-muted-foreground/50 transition-colors"
                 />
                 {snapSearch && (
                   <button
                     onClick={() => setSnapSearch('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground"
                   >
                     <X size={11} />
                   </button>
@@ -229,7 +229,7 @@ function FileRow({ file, autoOpen, onAutoOpened, onHeightChange, stripPrefix, me
           {snapsLoading ? (
             <SnapshotSkeleton />
           ) : snapshots ? (
-            <Timeline snapshots={snapshots} fileName={file.relPath} noteFilter={snapSearch} />
+            <Timeline snapshots={snapshots} fileName={file.relPath} currentHash={file.currentHash} noteFilter={snapSearch} />
           ) : (
             <p className="text-xs text-muted-foreground px-8 py-3">No snapshots yet.</p>
           )}
@@ -294,7 +294,7 @@ export function FileList({ files, filter = '', autoOpenFileId, onAutoOpened, str
           />
         ))}
         {filter && (
-          <p className="text-xs text-muted-foreground/40 text-center py-2">
+          <p className="text-xs text-muted-foreground/70 text-center py-2">
             {filtered.length} of {files.length} files
           </p>
         )}
@@ -345,7 +345,7 @@ function VirtualFileList({ files, total, filter, autoOpenFileId, onAutoOpened, s
         );
       })}
       {filter && (
-        <p className="text-xs text-muted-foreground/40 text-center py-2">
+        <p className="text-xs text-muted-foreground/70 text-center py-2">
           {files.length} of {total} files
         </p>
       )}

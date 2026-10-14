@@ -8,7 +8,7 @@ use std::time::Duration;
 use notify::{RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 use rusqlite::Connection;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use crate::config::{BackupTrigger, FolderConfig};
 use crate::db::repo::{self, Snapshot};
 use crate::error::AppError;
@@ -116,13 +116,13 @@ impl Default for Supervisor {
 }
 
 
-fn run_watcher_thread(
+fn run_watcher_thread<R: Runtime>(
     folder_id: i64,
     path: PathBuf,
     config: FolderConfig,
     db: Arc<Mutex<Connection>>,
     cas: Arc<CasStore>,
-    app: AppHandle,
+    app: AppHandle<R>,
     stop: Arc<AtomicBool>,
 ) {
     let debounce_ms = config.debounce_ms.unwrap_or_else(|| match &config.trigger {
@@ -206,13 +206,13 @@ fn run_interval_thread(
     tracing::info!("Interval watcher stopped for folder {folder_id}");
 }
 
-fn run_interval_scan(
+fn run_interval_scan<R: Runtime>(
     folder_id: i64,
     root: &std::path::Path,
     config: &FolderConfig,
     db: &Arc<Mutex<Connection>>,
     cas: &Arc<CasStore>,
-    app: &AppHandle,
+    app: &AppHandle<R>,
 ) {
     let ignore_matcher = IgnoreMatcher::new(root, &config.ignore_globs);
     let entries = match collect_files(root, &ignore_matcher, config.max_depth) {
@@ -257,19 +257,19 @@ fn run_interval_scan(
 }
 
 
-fn handle_event(
+fn handle_event<R: Runtime>(
     folder_id: i64,
     root: &std::path::Path,
     event: &notify_debouncer_full::DebouncedEvent,
     config: &FolderConfig,
     db: &Arc<Mutex<Connection>>,
     cas: &Arc<CasStore>,
-    app: &AppHandle,
+    app: &AppHandle<R>,
     ignore_matcher: &IgnoreMatcher,
 ) {
     use notify::EventKind::*;
     for abs_path in &event.event.paths {
-        if abs_path.is_dir() { continue; }
+        if abs_path.is_dir() || crate::util::fs::is_temp_file(abs_path) { continue; }
         let rel_path = match abs_path.strip_prefix(root) {
             Ok(r) => r.to_string_lossy().replace('\\', "/"),
             Err(_) => continue,
@@ -282,6 +282,14 @@ fn handle_event(
                 }
             }
             Remove(_) => {
+
+
+                if abs_path.exists() {
+                    if let Err(e) = snapshot_file(folder_id, abs_path, &rel_path, config, db, cas, app, false, "change") {
+                        tracing::warn!("snapshot error for {rel_path}: {e}");
+                    }
+                    continue;
+                }
                 if let Ok(conn) = db.lock() {
                     if let Ok(Some(file)) = repo::get_file_by_path(&conn, folder_id, &rel_path) {
                         let now = now_unix();
@@ -302,28 +310,28 @@ fn handle_event(
 }
 
 
-pub fn snapshot_file(
+pub fn snapshot_file<R: Runtime>(
     folder_id: i64,
     abs_path: &std::path::Path,
     rel_path: &str,
     config: &FolderConfig,
     db: &Arc<Mutex<Connection>>,
     cas: &Arc<CasStore>,
-    app: &AppHandle,
+    app: &AppHandle<R>,
     check_rename: bool,
     source: &str,
 ) -> Result<Option<Snapshot>, AppError> {
     snapshot_file_inner(folder_id, abs_path, rel_path, config, db, cas, app, check_rename, source, false)
 }
 
-fn snapshot_file_inner(
+fn snapshot_file_inner<R: Runtime>(
     folder_id: i64,
     abs_path: &std::path::Path,
     rel_path: &str,
     config: &FolderConfig,
     db: &Arc<Mutex<Connection>>,
     cas: &Arc<CasStore>,
-    app: &AppHandle,
+    app: &AppHandle<R>,
     check_rename: bool,
     source: &str,
     silent: bool,
@@ -381,6 +389,13 @@ fn snapshot_file_inner(
 
     if let Ok(Some(f)) = repo::get_file_by_path(&conn, folder_id, rel_path) {
         if f.current_hash.as_deref() == Some(&hash) && source != "manual" {
+            if let Ok(true) = repo::revive_file(&conn, f.id) {
+                let _ = app.emit("file:restored", serde_json::json!({
+                    "folderId": folder_id,
+                    "fileId": f.id,
+                    "relPath": rel_path,
+                }));
+            }
             return Ok(None);
         }
         if f.no_auto_snapshot && source != "manual" && source != "pre-rewind" {
@@ -408,8 +423,11 @@ fn snapshot_file_inner(
 
 
     if check_rename {
-        if let Ok(true) = rename::detect_and_handle(&conn, app, folder_id, rel_path, &hash) {
-            return Ok(None);
+        if let Ok(Some(folder)) = repo::get_folder(&conn, folder_id) {
+            let root = PathBuf::from(&folder.path);
+            if let Ok(true) = rename::detect_and_handle(&conn, app, folder_id, &root, rel_path, &hash) {
+                return Ok(None);
+            }
         }
     }
 
@@ -461,13 +479,13 @@ fn snapshot_file_inner(
 }
 
 
-pub fn initial_scan(
+pub fn initial_scan<R: Runtime>(
     folder_id: i64,
     root: &std::path::Path,
     config: &FolderConfig,
     db: &Arc<Mutex<Connection>>,
     cas: &Arc<CasStore>,
-    app: &AppHandle,
+    app: &AppHandle<R>,
 ) -> Result<(), AppError> {
     let ignore_matcher = IgnoreMatcher::new(root, &config.ignore_globs);
     let entries = collect_files(root, &ignore_matcher, config.max_depth)?;
@@ -584,7 +602,7 @@ pub fn now_unix() -> i64 {
 }
 
 
-pub fn append_activity_log(app: &AppHandle, action: &str, rel_path: Option<&str>, reason: Option<&str>) {
+pub fn append_activity_log<R: Runtime>(app: &AppHandle<R>, action: &str, rel_path: Option<&str>, reason: Option<&str>) {
     let state = app.state::<crate::AppState>();
     let path = &state.activity_log_path;
     let ts = {
@@ -601,5 +619,169 @@ pub fn append_activity_log(app: &AppHandle, action: &str, rel_path: Option<&str>
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = f.write_all(line.as_bytes());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::commands::rewind::write_snapshot_to_disk;
+    use crate::db::migrations;
+    use notify::event::{CreateKind, EventKind, ModifyKind, RemoveKind, RenameMode};
+    use notify_debouncer_full::DebouncedEvent;
+    use std::path::Path;
+    use std::time::Instant;
+    use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+
+    struct Env {
+        _dir: tempfile::TempDir,
+        root: PathBuf,
+        folder_id: i64,
+        config: FolderConfig,
+        db: Arc<Mutex<Connection>>,
+        cas: Arc<CasStore>,
+        app: tauri::App<MockRuntime>,
+    }
+
+    fn setup() -> Env {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("watched");
+        std::fs::create_dir_all(&root).unwrap();
+        let cas_dir = dir.path().join("cas");
+        std::fs::create_dir_all(&cas_dir).unwrap();
+
+        let conn = Connection::open(dir.path().join("db.sqlite")).unwrap();
+        migrations::run(&conn).unwrap();
+        let config = FolderConfig { debounce_ms: Some(150), ..Default::default() };
+        let folder = repo::insert_folder(&conn, root.to_str().unwrap(), "test", &config).unwrap();
+
+        let db = Arc::new(Mutex::new(conn));
+        let cas = Arc::new(CasStore::new(cas_dir));
+        let app = mock_builder().build(mock_context(noop_assets())).unwrap();
+        app.manage(crate::AppState {
+            db: Arc::clone(&db),
+            cas: Arc::clone(&cas),
+            data_dir: dir.path().to_path_buf(),
+            activity_log_path: dir.path().join("activity.log"),
+            supervisor: Mutex::new(Supervisor::new()),
+            close_to_tray: Arc::new(Mutex::new(false)),
+        });
+        Env { _dir: dir, root, folder_id: folder.id, config, db, cas, app }
+    }
+
+    impl Env {
+        fn save(&self, rel: &str, content: &str) -> Snapshot {
+            let abs = self.root.join(rel);
+            std::fs::write(&abs, content).unwrap();
+            snapshot_file(self.folder_id, &abs, rel, &self.config, &self.db, &self.cas, self.app.handle(), true, "change")
+                .unwrap()
+                .expect("a new snapshot")
+        }
+
+        fn fire(&self, kind: EventKind, paths: &[&Path]) {
+            let mut ev = notify::Event::new(kind);
+            for p in paths { ev = ev.add_path(p.to_path_buf()); }
+            let ignore = IgnoreMatcher::new(&self.root, &self.config.ignore_globs);
+            handle_event(self.folder_id, &self.root, &DebouncedEvent::new(ev, Instant::now()),
+                         &self.config, &self.db, &self.cas, self.app.handle(), &ignore);
+        }
+
+        fn listed(&self) -> Vec<String> {
+            let conn = self.db.lock().unwrap();
+            repo::list_files(&conn, self.folder_id, false).unwrap().into_iter().map(|f| f.rel_path).collect()
+        }
+
+        fn file(&self, rel: &str) -> repo::FileEntry {
+            repo::get_file_by_path(&self.db.lock().unwrap(), self.folder_id, rel).unwrap().unwrap()
+        }
+    }
+
+
+    #[test]
+    fn restore_survives_windows_replace_events() {
+        let env = setup();
+        let v1 = env.save("notes.txt", "first version");
+        env.save("notes.txt", "second version");
+
+        let target = env.root.join("notes.txt");
+        let file_id = env.file("notes.txt").id;
+        write_snapshot_to_disk(&env.db, &env.cas, file_id, &target, &v1.content_hash).unwrap();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "first version");
+
+        let tmp = env.root.join(".zftm_tmp_00000000_00000000");
+        env.fire(EventKind::Remove(RemoveKind::File), &[&target]);
+        env.fire(EventKind::Modify(ModifyKind::Name(RenameMode::Both)), &[&tmp, &target]);
+        env.fire(EventKind::Modify(ModifyKind::Any), &[&target]);
+
+        assert_eq!(env.listed(), vec!["notes.txt"], "restored file must stay in the list");
+        assert_eq!(env.file("notes.txt").current_hash.as_deref(), Some(v1.content_hash.as_str()));
+    }
+
+
+    #[test]
+    fn previously_hidden_file_is_revived() {
+        let env = setup();
+        env.save("a.txt", "hello");
+        let id = env.file("a.txt").id;
+        repo::mark_file_deleted(&env.db.lock().unwrap(), id, now_unix()).unwrap();
+        assert!(env.listed().is_empty());
+
+        env.fire(EventKind::Modify(ModifyKind::Any), &[&env.root.join("a.txt")]);
+        assert_eq!(env.listed(), vec!["a.txt"]);
+    }
+
+
+    #[test]
+    fn real_deletion_still_hides_file() {
+        let env = setup();
+        env.save("gone.txt", "bye");
+        let path = env.root.join("gone.txt");
+        std::fs::remove_file(&path).unwrap();
+        env.fire(EventKind::Remove(RemoveKind::File), &[&path]);
+        assert!(env.listed().is_empty());
+    }
+
+
+    #[test]
+    fn identical_copy_is_not_a_rename() {
+        let env = setup();
+        env.save("orig.txt", "same bytes");
+        let orig_id = env.file("orig.txt").id;
+
+        std::fs::copy(env.root.join("orig.txt"), env.root.join("copy.txt")).unwrap();
+        env.fire(EventKind::Create(CreateKind::File), &[&env.root.join("copy.txt")]);
+
+        assert_eq!(env.file("orig.txt").id, orig_id, "original keeps its history");
+        assert_eq!(env.listed(), vec!["copy.txt", "orig.txt"]);
+    }
+
+
+    #[test]
+    fn restore_with_live_watcher_keeps_file_listed() {
+        let env = setup();
+        let v1 = env.save("live.txt", "v1");
+        env.save("live.txt", "v2");
+        let file_id = env.file("live.txt").id;
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let handle = {
+            let (root, cfg, db, cas, app, stop) = (
+                env.root.clone(), env.config.clone(), Arc::clone(&env.db), Arc::clone(&env.cas),
+                env.app.handle().clone(), Arc::clone(&stop),
+            );
+            let folder_id = env.folder_id;
+            std::thread::spawn(move || run_watcher_thread(folder_id, root, cfg, db, cas, app, stop))
+        };
+        std::thread::sleep(Duration::from_millis(300));
+
+        write_snapshot_to_disk(&env.db, &env.cas, file_id, &env.root.join("live.txt"), &v1.content_hash).unwrap();
+        std::thread::sleep(Duration::from_millis(1200));
+
+        stop.store(true, Ordering::Relaxed);
+        handle.join().unwrap();
+
+        assert_eq!(env.listed(), vec!["live.txt"]);
+        assert_eq!(env.file("live.txt").current_hash.as_deref(), Some(v1.content_hash.as_str()));
     }
 }

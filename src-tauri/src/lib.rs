@@ -154,6 +154,11 @@ pub fn run() {
             tray_builder.build(app)?;
 
 
+            #[cfg(target_os = "windows")]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_shadow(windows_version::OsVersion::current().build >= 22000);
+            }
+
             if std::env::args().any(|a| a == "--hidden") {
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.hide();

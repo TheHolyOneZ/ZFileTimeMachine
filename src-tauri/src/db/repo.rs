@@ -316,7 +316,8 @@ pub fn upsert_file(
          ON CONFLICT(folder_id, rel_path) DO UPDATE SET
            is_binary = excluded.is_binary,
            current_hash = excluded.current_hash,
-           last_modified = excluded.last_modified",
+           last_modified = excluded.last_modified,
+           deleted_at = NULL",
         params![folder_id, rel_path, is_binary as i64, current_hash, last_modified],
     )?;
     get_file_by_path(conn, folder_id, rel_path)?
@@ -428,6 +429,28 @@ pub fn get_file_by_hash(conn: &Connection, hash: &str) -> Result<Option<FileEntr
 
 pub fn mark_file_deleted(conn: &Connection, file_id: i64, at: i64) -> Result<(), AppError> {
     conn.execute("UPDATE files SET deleted_at = ?1 WHERE id = ?2", params![at, file_id])?;
+    Ok(())
+}
+
+pub fn revive_file(conn: &Connection, file_id: i64) -> Result<bool, AppError> {
+    let n = conn.execute(
+        "UPDATE files SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
+        params![file_id],
+    )?;
+    Ok(n > 0)
+}
+
+
+pub fn mark_file_restored(
+    conn: &Connection,
+    file_id: i64,
+    hash: &str,
+    last_modified: i64,
+) -> Result<(), AppError> {
+    conn.execute(
+        "UPDATE files SET current_hash = ?1, last_modified = ?2, deleted_at = NULL WHERE id = ?3",
+        params![hash, last_modified, file_id],
+    )?;
     Ok(())
 }
 
@@ -898,4 +921,54 @@ pub fn now_unix() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::migrations;
+
+    fn setup() -> (Connection, i64) {
+        let conn = Connection::open_in_memory().unwrap();
+        migrations::run(&conn).unwrap();
+        let folder = insert_folder(&conn, "/tmp/zftm-test", "test", &Default::default()).unwrap();
+        (conn, folder.id)
+    }
+
+    fn live_paths(conn: &Connection, folder_id: i64) -> Vec<String> {
+        list_files(conn, folder_id, false).unwrap().into_iter().map(|f| f.rel_path).collect()
+    }
+
+    #[test]
+    fn upsert_revives_deleted_file() {
+        let (conn, folder_id) = setup();
+        let f = upsert_file(&conn, folder_id, "a.txt", false, Some("h1"), 1).unwrap();
+        mark_file_deleted(&conn, f.id, 2).unwrap();
+        assert!(live_paths(&conn, folder_id).is_empty());
+
+        upsert_file(&conn, folder_id, "a.txt", false, Some("h2"), 3).unwrap();
+        assert_eq!(live_paths(&conn, folder_id), vec!["a.txt"]);
+    }
+
+    #[test]
+    fn mark_restored_revives_and_sets_hash() {
+        let (conn, folder_id) = setup();
+        let f = upsert_file(&conn, folder_id, "a.txt", false, Some("h1"), 1).unwrap();
+        mark_file_deleted(&conn, f.id, 2).unwrap();
+
+        mark_file_restored(&conn, f.id, "h0", 5).unwrap();
+        let got = get_file_by_id(&conn, f.id).unwrap().unwrap();
+        assert_eq!(got.current_hash.as_deref(), Some("h0"));
+        assert_eq!(live_paths(&conn, folder_id), vec!["a.txt"]);
+    }
+
+    #[test]
+    fn revive_file_reports_change_only_once() {
+        let (conn, folder_id) = setup();
+        let f = upsert_file(&conn, folder_id, "a.txt", false, Some("h1"), 1).unwrap();
+        assert!(!revive_file(&conn, f.id).unwrap());
+        mark_file_deleted(&conn, f.id, 2).unwrap();
+        assert!(revive_file(&conn, f.id).unwrap());
+        assert!(!revive_file(&conn, f.id).unwrap());
+    }
 }

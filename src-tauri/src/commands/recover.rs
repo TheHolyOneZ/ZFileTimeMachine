@@ -316,6 +316,11 @@ pub(crate) fn run_bulk_recover(
 
         match util_fs::atomic_write(&target, &content, &snap.content_hash) {
             Ok(()) => {
+                if args.mode == RecoverMode::Restore {
+                    if let Ok(conn) = db.lock() {
+                        let _ = repo::mark_file_restored(&conn, file.id, &snap.content_hash, util_fs::mtime_millis(&target));
+                    }
+                }
                 succeeded += 1;
                 bytes_written += content.len() as u64;
             }

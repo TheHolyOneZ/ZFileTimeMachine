@@ -51,6 +51,21 @@ pub fn atomic_write(target: &Path, content: &[u8], expected_hash: &str) -> Resul
     Ok(())
 }
 
+pub fn mtime_millis(path: &Path) -> i64 {
+    path.metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+pub fn is_temp_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with(".zftm_tmp_"))
+}
+
 fn nanos_low() -> u32 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
