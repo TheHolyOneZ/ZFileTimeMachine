@@ -69,7 +69,11 @@ export function IgnoreRulesEditor({ globs, onChange }: Props) {
         </button>
       </div>
       <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+        End a rule with <code className="font-mono bg-secondary/40 px-1 rounded">/</code> to skip a folder and everything in it, at any depth (e.g. <code className="font-mono bg-secondary/40 px-1 rounded">Cache/</code>).
         Prefix with <code className="font-mono bg-secondary/40 px-1 rounded">!</code> to un-ignore a pattern (e.g. <code className="font-mono bg-secondary/40 px-1 rounded">!important.log</code>)
+      </p>
+      <p className="text-[10px] text-muted-foreground/70">
+        ZFileTimeMachine's own data folder is always skipped, you don't need a rule for it.
       </p>
     </div>
   );

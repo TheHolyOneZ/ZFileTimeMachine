@@ -12,7 +12,7 @@
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri%202-24C8DB?logo=tauri)](https://tauri.app)
 [![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?logo=react)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Backend-Rust-CE422B?logo=rust)](https://www.rust-lang.org)
-[![Version](https://img.shields.io/badge/version-0.2.0-3b82f6)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.1-3b82f6)](CHANGELOG.md)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows%20%7C%20macOS-555)](#platform-support)
 [![Download](https://img.shields.io/badge/Download-zsync.eu%2Fzftm-3b82f6)](https://zsync.eu/zftm/)
 
@@ -33,7 +33,13 @@ No cloud. No git. No command line. Just your files, safely versioned, on your ow
 
 ---
 
-## What's new in 0.2.0
+## What's new in 0.2.1
+
+- **The app never snapshots its own data.** Fixes [#2](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues/2), where watching a folder that contains ZFileTimeMachine's data folder (such as `~/Library/Application Support` on macOS) made it snapshot its own snapshots without end. That folder is now always skipped, and files from it that were already tracked are cleaned up on the next start.
+- **Folder ignore rules work on live changes.** Rules like `Cache/` or `node_modules/` used to apply only to the first scan. Every later change inside those folders is now skipped too.
+- **Paused subfolders stay paused.** New files in a paused subfolder are added as paused instead of being snapshotted.
+
+### 0.2.0
 
 - **Restored files stay in the list.** Fixes [#1](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues/1), where rewinding a file on Windows made it vanish from the monitored files. Also fixes copies being mistaken for renames, and the timeline's "Current" marker after a rewind.
 - **A fresh look** with a custom title bar, built-in search (`Ctrl K` / `⌘ K`), new typography, and a reworked light theme. Navigation is exactly where it was.
@@ -258,11 +264,17 @@ __pycache__/
 
 Rules are per-folder and editable at any time through the settings UI. The app ships with sensible defaults so you don't have to think about it for common project types.
 
+A rule ending in `/` skips that folder and everything inside it. Without another `/` it matches at any depth (`Cache/` skips every folder named `Cache`); with one it is relative to the watched folder (`SomeApp/cache/`).
+
+ZFileTimeMachine's own data folder is always skipped, so you can safely watch a folder that contains it, such as `~/Library/Application Support` on macOS or `%LOCALAPPDATA%` on Windows. No rule is needed. The app's data folder itself can't be added as a watched folder.
+
 ---
 
 ### Per-File Overrides
 
 For files you never want auto-snapshotted (build artifacts, lock files, frequently-regenerated outputs), click the **pause icon** next to any file to switch it to **Manual only** mode. The file stays tracked in the database but snapshots only happen when you explicitly ask.
+
+You can do the same for a whole subfolder from its settings icon or right-click menu. Files added to a paused subfolder later are paused as well: they appear in the list without a snapshot, and you can still snapshot them by hand.
 
 ---
 
@@ -395,6 +407,8 @@ zfiletimemachine/
     │       └── 73be6e8f…     # Named by its full hash; each unique content is stored once
     └── ...
 ```
+
+ZFileTimeMachine never snapshots this folder, even when it sits inside a folder you watch.
 
 > [!WARNING]
 > Deleting this folder removes all your snapshot history permanently. Your original files in the watched folders are completely untouched — but every saved version will be gone.

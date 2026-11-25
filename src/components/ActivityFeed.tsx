@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { listActivityLog } from '@/lib/tauri';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Camera, Trash2, RotateCcw, Zap, AlertCircle, History, RefreshCw } from 'lucide-react';
+import { Camera, Trash2, RotateCcw, Zap, AlertCircle, History, RefreshCw, ShieldOff } from 'lucide-react';
 import type { ActivityEntry } from '@/lib/types';
 
 interface Props {
@@ -42,6 +42,11 @@ const ACTION_META: Record<string, {
     icon: <History size={11} />,
     label: 'Recovery',
     colors: 'bg-purple-500/15 text-purple-400',
+  },
+  app_data_excluded: {
+    icon: <ShieldOff size={11} />,
+    label: 'App data skipped',
+    colors: 'bg-secondary/80 text-muted-foreground/70',
   },
 };
 
@@ -89,6 +94,12 @@ function humanizeReason(action: string, reason: string): string {
     const changed = kv.new_or_changed ?? kv.new;
     if (total !== undefined && changed !== undefined) {
       return `${total} file${total === '1' ? '' : 's'} checked · ${changed} new or changed`;
+    }
+  }
+  if (action === 'app_data_excluded') {
+    const removed = reason.match(/removed=(\d+)/)?.[1];
+    if (removed !== undefined) {
+      return `ZFileTimeMachine's own data folder is never snapshotted · ${removed} file${removed === '1' ? '' : 's'} removed from tracking`;
     }
   }
   const SOURCES: Record<string, string> = {

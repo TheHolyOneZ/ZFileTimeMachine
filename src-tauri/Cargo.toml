@@ -1,6 +1,6 @@
 [package]
 name = "zfiletimemachine"
-version = "0.2.0"
+version = "0.2.1"
 description = "Automatic, private version history for any folder on your computer."
 authors = ["TheHolyOneZ"]
 license = "GPL-3.0-or-later"

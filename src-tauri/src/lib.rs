@@ -54,6 +54,26 @@ pub fn run() {
         .setup(|app| {
             let data_dir = resolve_data_dir();
             std::fs::create_dir_all(&data_dir)?;
+            watcher::ignore::protect_path(&data_dir);
+            {
+                let paths = app.path();
+                for dir in [
+                    paths.app_data_dir(),
+                    paths.app_local_data_dir(),
+                    paths.app_cache_dir(),
+                    paths.app_config_dir(),
+                    paths.app_log_dir(),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    watcher::ignore::protect_path(&dir);
+                }
+                #[cfg(target_os = "macos")]
+                if let Ok(home) = paths.home_dir() {
+                    watcher::ignore::protect_path(&home.join("Library").join("WebKit").join(&app.config().identifier));
+                }
+            }
 
             let cas_dir = data_dir.join("cas");
             std::fs::create_dir_all(&cas_dir)?;
@@ -85,7 +105,11 @@ pub fn run() {
 
             let folders = {
                 let guard = db.lock().expect("db lock");
-                db::repo::list_folders(&guard).unwrap_or_default()
+                let folders = db::repo::list_folders(&guard).unwrap_or_default();
+                for folder in &folders {
+                    watcher::supervisor::purge_protected_files(&guard, &cas, folder.id, &PathBuf::from(&folder.path));
+                }
+                folders
             };
             let mut sup = supervisor;
             for folder in folders {

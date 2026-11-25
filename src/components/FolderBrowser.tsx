@@ -111,7 +111,7 @@ function FolderSettingsPopup({
           <span className="text-[10px] text-muted-foreground/70">all {totalFiles} files</span>
         </button>
         <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
-          Paused files still appear in the list and can be snapshotted manually via the camera icon.
+          Files added to this folder later are paused too. Paused files still appear in the list and can be snapshotted manually via the camera icon.
         </p>
       </div>
     </div>,

@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use crate::config::FolderConfig;
 use crate::db::repo::{self, Folder, map_folder_row};
-use crate::watcher::supervisor;
+use crate::watcher::{ignore, supervisor};
 use crate::AppState;
 
 
@@ -53,6 +53,12 @@ pub async fn add_folder(
     let canonical = folder_path.canonicalize().unwrap_or_else(|_| folder_path.clone());
     let canonical_str = normalize_canonical(canonical);
 
+    if ignore::is_protected(&folder_path) || ignore::is_protected(Path::new(&canonical_str)) {
+        return Err(format!(
+            "This is the folder where ZFileTimeMachine keeps its own snapshots, so it can't be watched: {canonical_str}"
+        ));
+    }
+
     let existing = {
         let conn = state.db.lock().map_err(|_| "db lock poisoned")?;
         repo::get_folder_by_path(&conn, &canonical_str).map_err(|e| e.to_string())?
@@ -80,6 +86,11 @@ pub async fn add_folder(
                 .map_err(|e| e.to_string())?
         }
     };
+
+    {
+        let conn = state.db.lock().map_err(|_| "db lock poisoned")?;
+        supervisor::purge_protected_files(&conn, &state.cas, folder.id, Path::new(&folder.path));
+    }
 
     let db = state.db_arc();
     let cas = state.cas.clone();

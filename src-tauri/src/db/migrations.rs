@@ -31,5 +31,13 @@ pub fn run(conn: &Connection) -> Result<(), AppError> {
         );"
     );
     let _ = conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_activity_folder_ts ON activity_log(folder_id, timestamp DESC);");
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS path_overrides (
+            folder_id INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+            prefix TEXT NOT NULL,
+            no_auto_snapshot INTEGER NOT NULL,
+            PRIMARY KEY (folder_id, prefix)
+        );"
+    )?;
     Ok(())
 }

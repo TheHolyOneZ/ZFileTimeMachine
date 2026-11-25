@@ -317,7 +317,6 @@ export function OnboardingModal({ onComplete }: Props) {
     );
   }
 
-  // ── Step: add-folder ─────────────────────────────────────────────────────
 
   if (step === 'add-folder') {
     const busy = pickingFolder || addFolder.isPending;
@@ -481,7 +480,6 @@ export function OnboardingModal({ onComplete }: Props) {
           </p>
         </div>
 
-        {/* Summary card */}
         {addedFolder && (
           <div className="p-4 rounded-xl bg-secondary/30 border border-border/50 mb-6 space-y-2.5">
             <p className="text-xs font-semibold text-muted-foreground mb-3">

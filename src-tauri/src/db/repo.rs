@@ -820,25 +820,111 @@ pub fn set_file_override(conn: &Connection, file_id: i64, no_auto_snapshot: bool
 }
 
 
+const UNDER_PREFIX: &str =
+    "(?2 = '' OR substr(rel_path, 1, length(?2) + 1) = ?2 || '/')";
+
+fn normalize_prefix(prefix: &str) -> String {
+    prefix.trim_matches('/').to_string()
+}
+
 pub fn set_path_override(
     conn: &Connection,
     folder_id: i64,
     path_prefix: &str,
     no_auto_snapshot: bool,
 ) -> Result<u64, AppError> {
-    let rows = if path_prefix.is_empty() {
-        conn.execute(
-            "UPDATE files SET no_auto_snapshot = ?1 WHERE folder_id = ?2",
-            params![no_auto_snapshot as i64, folder_id],
-        )?
-    } else {
-        let like = format!("{path_prefix}/%");
-        conn.execute(
-            "UPDATE files SET no_auto_snapshot = ?1 WHERE folder_id = ?2 AND rel_path LIKE ?3",
-            params![no_auto_snapshot as i64, folder_id, like],
-        )?
-    };
+    let prefix = normalize_prefix(path_prefix);
+    let tx = conn.unchecked_transaction()?;
+    let rows = tx.execute(
+        &format!("UPDATE files SET no_auto_snapshot = ?3 WHERE folder_id = ?1 AND {UNDER_PREFIX}"),
+        params![folder_id, prefix, no_auto_snapshot as i64],
+    )?;
+    tx.execute(
+        "DELETE FROM path_overrides WHERE folder_id = ?1
+           AND (?2 = '' OR prefix = ?2 OR substr(prefix, 1, length(?2) + 1) = ?2 || '/')",
+        params![folder_id, prefix],
+    )?;
+    if path_paused(&tx, folder_id, &prefix, true)? != no_auto_snapshot {
+        tx.execute(
+            "INSERT INTO path_overrides (folder_id, prefix, no_auto_snapshot) VALUES (?1, ?2, ?3)",
+            params![folder_id, prefix, no_auto_snapshot as i64],
+        )?;
+    }
+    tx.commit()?;
     Ok(rows as u64)
+}
+
+pub fn path_paused(conn: &Connection, folder_id: i64, rel_path: &str, is_dir: bool) -> Result<bool, AppError> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT prefix, no_auto_snapshot FROM path_overrides WHERE folder_id = ?1",
+    )?;
+    let rules = stmt.query_map(params![folder_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? != 0)))?;
+    let mut best: Option<(usize, bool)> = None;
+    for rule in rules {
+        let (prefix, paused) = rule?;
+        let applies = prefix.is_empty()
+            || (is_dir && rel_path == prefix)
+            || rel_path.strip_prefix(&prefix).is_some_and(|rest| rest.starts_with('/'));
+        if applies && best.map_or(true, |(len, _)| prefix.len() >= len) {
+            best = Some((prefix.len(), paused));
+        }
+    }
+    Ok(best.map(|(_, paused)| paused).unwrap_or(false))
+}
+
+pub fn insert_paused_file(
+    conn: &Connection,
+    folder_id: i64,
+    rel_path: &str,
+    is_binary: bool,
+    last_modified: i64,
+) -> Result<FileEntry, AppError> {
+    conn.execute(
+        "INSERT INTO files (folder_id, rel_path, is_binary, current_hash, last_modified, no_auto_snapshot)
+         VALUES (?1, ?2, ?3, NULL, ?4, 1)
+         ON CONFLICT(folder_id, rel_path) DO UPDATE SET
+           no_auto_snapshot = 1,
+           deleted_at = NULL",
+        params![folder_id, rel_path, is_binary as i64, last_modified],
+    )?;
+    get_file_by_path(conn, folder_id, rel_path)?
+        .ok_or_else(|| AppError::NotFound(rel_path.to_string()))
+}
+
+pub fn purge_files_under(conn: &Connection, folder_id: i64, path_prefix: &str) -> Result<(u64, Vec<String>), AppError> {
+    let prefix = normalize_prefix(path_prefix);
+    let under = format!("folder_id = ?1 AND (rel_path = ?2 OR {UNDER_PREFIX})");
+    let tx = conn.unchecked_transaction()?;
+    let hashes: Vec<String> = {
+        let mut stmt = tx.prepare(&format!(
+            "SELECT content_hash FROM snapshots WHERE file_id IN (SELECT id FROM files WHERE {under})"
+        ))?;
+        let rows = stmt.query_map(params![folder_id, prefix], |r| r.get(0))?;
+        rows.collect::<Result<_, _>>()?
+    };
+    decrement_cas_refs_batch(&tx, &hashes)?;
+    tx.execute(
+        &format!("DELETE FROM snapshots WHERE file_id IN (SELECT id FROM files WHERE {under})"),
+        params![folder_id, prefix],
+    )?;
+    let removed = tx.execute(&format!("DELETE FROM files WHERE {under}"), params![folder_id, prefix])?;
+    let mut unreferenced: Vec<String> = Vec::new();
+    for hash in hashes {
+        if unreferenced.contains(&hash) {
+            continue;
+        }
+        let still_used: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM snapshots WHERE content_hash = ?1)
+                 OR EXISTS(SELECT 1 FROM cas_refs WHERE content_hash = ?1 AND ref_count > 0)",
+            params![hash],
+            |r| r.get(0),
+        )?;
+        if !still_used {
+            unreferenced.push(hash);
+        }
+    }
+    tx.commit()?;
+    Ok((removed as u64, unreferenced))
 }
 
 
@@ -960,6 +1046,33 @@ mod tests {
         let got = get_file_by_id(&conn, f.id).unwrap().unwrap();
         assert_eq!(got.current_hash.as_deref(), Some("h0"));
         assert_eq!(live_paths(&conn, folder_id), vec!["a.txt"]);
+    }
+
+    #[test]
+    fn path_override_matches_exact_folder_names_only() {
+        let (conn, folder_id) = setup();
+        for p in ["my_dir/a.txt", "myXdir/b.txt", "My_dir/c.txt", "my_dir2/d.txt"] {
+            upsert_file(&conn, folder_id, p, false, Some("h"), 1).unwrap();
+        }
+        assert_eq!(set_path_override(&conn, folder_id, "my_dir", true).unwrap(), 1);
+        let paused: Vec<String> = list_files(&conn, folder_id, false).unwrap()
+            .into_iter().filter(|f| f.no_auto_snapshot).map(|f| f.rel_path).collect();
+        assert_eq!(paused, vec!["my_dir/a.txt"]);
+    }
+
+    #[test]
+    fn nested_resume_inside_paused_folder() {
+        let (conn, folder_id) = setup();
+        set_path_override(&conn, folder_id, "a", true).unwrap();
+        set_path_override(&conn, folder_id, "a/b", false).unwrap();
+        assert!(path_paused(&conn, folder_id, "a/x.txt", false).unwrap());
+        assert!(!path_paused(&conn, folder_id, "a/b/y.txt", false).unwrap());
+        assert!(!path_paused(&conn, folder_id, "ab/z.txt", false).unwrap());
+
+        set_path_override(&conn, folder_id, "a", false).unwrap();
+        assert!(!path_paused(&conn, folder_id, "a/x.txt", false).unwrap());
+        let rules: i64 = conn.query_row("SELECT COUNT(*) FROM path_overrides", [], |r| r.get(0)).unwrap();
+        assert_eq!(rules, 0);
     }
 
     #[test]

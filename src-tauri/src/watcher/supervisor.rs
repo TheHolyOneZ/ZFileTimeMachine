@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -8,6 +8,7 @@ use std::time::Duration;
 use notify::{RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 use rusqlite::Connection;
+use sha2::Digest;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use crate::config::{BackupTrigger, FolderConfig};
 use crate::db::repo::{self, Snapshot};
@@ -18,7 +19,7 @@ use crate::events::{
 };
 use crate::snapshot::{binary, retention};
 use crate::store::cas::CasStore;
-use crate::watcher::ignore::IgnoreMatcher;
+use crate::watcher::ignore::{self, IgnoreMatcher};
 use crate::rename;
 
 pub struct Supervisor {
@@ -380,25 +381,23 @@ fn snapshot_file_inner<R: Runtime>(
     }
 
     let data = std::fs::read(abs_path)?;
-
-    let compress = config.compression_enabled.unwrap_or(false);
-    let hash = cas.put_with_compression(&data, compress)?;
+    let hash = hex::encode(sha2::Sha256::digest(&data));
+    let automatic = source != "manual" && source != "pre-rewind";
 
     let conn = db.lock().map_err(|_| AppError::Other("db lock poisoned".into()))?;
 
-
-    if let Ok(Some(f)) = repo::get_file_by_path(&conn, folder_id, rel_path) {
+    let existing = repo::get_file_by_path(&conn, folder_id, rel_path)?;
+    if let Some(f) = &existing {
         if f.current_hash.as_deref() == Some(&hash) && source != "manual" {
             if let Ok(true) = repo::revive_file(&conn, f.id) {
-                let _ = app.emit("file:restored", serde_json::json!({
-                    "folderId": folder_id,
-                    "fileId": f.id,
-                    "relPath": rel_path,
-                }));
+                emit_file_restored(app, folder_id, f.id, rel_path);
             }
             return Ok(None);
         }
-        if f.no_auto_snapshot && source != "manual" && source != "pre-rewind" {
+        if f.no_auto_snapshot && automatic {
+            if let Ok(true) = repo::revive_file(&conn, f.id) {
+                emit_file_restored(app, folder_id, f.id, rel_path);
+            }
             if !silent {
                 emit_snapshot_skipped(app, SnapshotSkipped {
                     folder_id,
@@ -410,7 +409,7 @@ fn snapshot_file_inner<R: Runtime>(
         }
 
         if let Some(min_secs) = config.min_snapshot_interval_secs {
-            if source != "manual" && source != "pre-rewind" {
+            if automatic {
                 if let Ok(Some(latest)) = repo::get_latest_snapshot(&conn, f.id) {
                     let elapsed_secs = (now_unix() - latest.created_at) / 1000;
                     if elapsed_secs < min_secs as i64 {
@@ -421,15 +420,37 @@ fn snapshot_file_inner<R: Runtime>(
         }
     }
 
+    let in_paused_dir = existing.is_none() && automatic && repo::path_paused(&conn, folder_id, rel_path, false)?;
 
     if check_rename {
         if let Ok(Some(folder)) = repo::get_folder(&conn, folder_id) {
             let root = PathBuf::from(&folder.path);
             if let Ok(true) = rename::detect_and_handle(&conn, app, folder_id, &root, rel_path, &hash) {
+                if in_paused_dir {
+                    if let Ok(Some(moved)) = repo::get_file_by_path(&conn, folder_id, rel_path) {
+                        repo::set_file_override(&conn, moved.id, true)?;
+                    }
+                }
                 return Ok(None);
             }
         }
     }
+
+    if in_paused_dir {
+        let file = repo::insert_paused_file(&conn, folder_id, rel_path, is_binary, last_modified)?;
+        emit_file_restored(app, folder_id, file.id, rel_path);
+        if !silent {
+            emit_snapshot_skipped(app, SnapshotSkipped {
+                folder_id,
+                rel_path: rel_path.to_string(),
+                reason: "manual-only mode".to_string(),
+            });
+        }
+        return Ok(None);
+    }
+
+    let compress = config.compression_enabled.unwrap_or(false);
+    cas.put_with_compression(&data, compress)?;
 
     let file = repo::upsert_file(&conn, folder_id, rel_path, is_binary, Some(&hash), last_modified)?;
 
@@ -591,6 +612,41 @@ fn collect_recursive(
         }
     }
     Ok(())
+}
+
+
+fn emit_file_restored<R: Runtime>(app: &AppHandle<R>, folder_id: i64, file_id: i64, rel_path: &str) {
+    let _ = app.emit("file:restored", serde_json::json!({
+        "folderId": folder_id,
+        "fileId": file_id,
+        "relPath": rel_path,
+    }));
+}
+
+
+pub fn purge_protected_files(conn: &Connection, cas: &CasStore, folder_id: i64, root: &Path) -> u64 {
+    let mut total = 0;
+    for prefix in ignore::protected_prefixes_in(root) {
+        match repo::purge_files_under(conn, folder_id, &prefix) {
+            Ok((removed, unreferenced)) => {
+                for hash in &unreferenced {
+                    if cas.remove(hash).is_ok() {
+                        let _ = repo::delete_cas_ref(conn, hash);
+                    }
+                }
+                if removed > 0 {
+                    tracing::info!("Removed {removed} tracked files of the app's own data in {prefix:?} from folder {folder_id}");
+                    let _ = repo::log_activity(
+                        conn, folder_id, now_unix(), "app_data_excluded", Some(&prefix),
+                        Some(&format!("removed={removed}")), None,
+                    );
+                }
+                total += removed;
+            }
+            Err(e) => tracing::warn!("Could not remove app data files in {prefix:?} from folder {folder_id}: {e}"),
+        }
+    }
+    total
 }
 
 
@@ -756,6 +812,131 @@ mod tests {
         assert_eq!(env.listed(), vec!["copy.txt", "orig.txt"]);
     }
 
+
+    #[test]
+    fn app_data_folder_inside_watched_folder_is_never_snapshotted() {
+        let env = setup();
+        let data = env.root.join("com.zfiletimemachine.ZFileTimeMachine");
+        std::fs::create_dir_all(data.join("cas/ab/cd")).unwrap();
+        crate::watcher::ignore::protect_path(&data);
+        let blob = data.join("cas/ab/cd/abcd");
+        std::fs::write(&blob, "blob").unwrap();
+        std::fs::write(data.join("db.sqlite-wal"), "wal").unwrap();
+        std::fs::write(env.root.join("settings.plist"), "prefs").unwrap();
+
+        env.fire(EventKind::Create(CreateKind::File), &[&blob]);
+        env.fire(EventKind::Modify(ModifyKind::Any), &[&data.join("db.sqlite-wal")]);
+        initial_scan(env.folder_id, &env.root, &env.config, &env.db, &env.cas, env.app.handle()).unwrap();
+
+        assert_eq!(env.listed(), vec!["settings.plist"]);
+    }
+
+    #[test]
+    fn live_watcher_does_not_loop_on_its_own_store() {
+        let env = setup();
+        let data = env.root.join("zftm-data");
+        std::fs::create_dir_all(&data).unwrap();
+        crate::watcher::ignore::protect_path(&data);
+        let store = Arc::new(CasStore::new(data.join("cas")));
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let handle = {
+            let (root, cfg, db, app, stop) = (
+                env.root.clone(), env.config.clone(), Arc::clone(&env.db),
+                env.app.handle().clone(), Arc::clone(&stop),
+            );
+            let (folder_id, store) = (env.folder_id, Arc::clone(&store));
+            std::thread::spawn(move || run_watcher_thread(folder_id, root, cfg, db, store, app, stop))
+        };
+        std::thread::sleep(Duration::from_millis(300));
+
+        std::fs::write(env.root.join("prefs.plist"), "a").unwrap();
+        std::thread::sleep(Duration::from_millis(800));
+        std::fs::write(env.root.join("prefs.plist"), "b").unwrap();
+        std::thread::sleep(Duration::from_millis(1200));
+
+        stop.store(true, Ordering::Relaxed);
+        handle.join().unwrap();
+
+        assert_eq!(env.listed(), vec!["prefs.plist"]);
+        let prefs_id = env.file("prefs.plist").id;
+        let snaps = repo::list_snapshots(&env.db.lock().unwrap(), prefs_id).unwrap();
+        assert_eq!(snaps.len(), 2);
+    }
+
+    #[test]
+    fn existing_app_data_entries_are_purged_and_shared_blobs_kept() {
+        let env = setup();
+        let real = env.save("notes.txt", "shared content");
+        let data = env.root.join("app-data");
+        std::fs::create_dir_all(&data).unwrap();
+        env.save("app-data/copy-of-notes", "shared content");
+        let junk = env.save("app-data/db.sqlite", "junk only here");
+
+        crate::watcher::ignore::protect_path(&data);
+        let removed = purge_protected_files(&env.db.lock().unwrap(), &env.cas, env.folder_id, &env.root);
+
+        assert_eq!(removed, 2);
+        assert_eq!(env.listed(), vec!["notes.txt"]);
+        assert!(env.cas.exists(&real.content_hash), "blob still used by notes.txt must stay");
+        assert!(!env.cas.exists(&junk.content_hash), "blob only used by app data must be removed");
+    }
+
+    #[test]
+    fn directory_ignore_rule_applies_to_live_events() {
+        let mut env = setup();
+        env.config.ignore_globs = vec!["cache/".to_string()];
+        std::fs::create_dir_all(env.root.join("app/cache")).unwrap();
+        let ignored = env.root.join("app/cache/blob.bin");
+        std::fs::write(&ignored, "x").unwrap();
+        std::fs::write(env.root.join("app/keep.txt"), "y").unwrap();
+
+        env.fire(EventKind::Create(CreateKind::File), &[&ignored]);
+        env.fire(EventKind::Create(CreateKind::File), &[&env.root.join("app/keep.txt")]);
+
+        assert_eq!(env.listed(), vec!["app/keep.txt"]);
+    }
+
+    #[test]
+    fn new_file_in_paused_folder_stays_paused() {
+        let env = setup();
+        std::fs::create_dir_all(env.root.join("sub")).unwrap();
+        env.save("sub/old.txt", "old");
+        repo::set_path_override(&env.db.lock().unwrap(), env.folder_id, "sub", true).unwrap();
+
+        let new_file = env.root.join("sub/new.txt");
+        std::fs::write(&new_file, "new").unwrap();
+        env.fire(EventKind::Create(CreateKind::File), &[&new_file]);
+        std::fs::write(&new_file, "newer").unwrap();
+        env.fire(EventKind::Modify(ModifyKind::Any), &[&new_file]);
+
+        let added = env.file("sub/new.txt");
+        assert!(added.no_auto_snapshot, "new file must inherit the folder's pause");
+        assert!(repo::list_snapshots(&env.db.lock().unwrap(), added.id).unwrap().is_empty());
+        assert!(env.file("sub/old.txt").no_auto_snapshot);
+
+        let manual = snapshot_file(env.folder_id, &new_file, "sub/new.txt", &env.config, &env.db, &env.cas, env.app.handle(), false, "manual")
+            .unwrap();
+        assert!(manual.is_some(), "manual snapshot still works in a paused folder");
+
+        repo::set_path_override(&env.db.lock().unwrap(), env.folder_id, "sub", false).unwrap();
+        let later = env.root.join("sub/later.txt");
+        std::fs::write(&later, "later").unwrap();
+        env.fire(EventKind::Create(CreateKind::File), &[&later]);
+        assert!(!env.file("sub/later.txt").no_auto_snapshot);
+    }
+
+    #[test]
+    fn skipped_snapshot_does_not_leave_blob_behind() {
+        let env = setup();
+        env.save("p.txt", "v1");
+        let id = env.file("p.txt").id;
+        repo::set_file_override(&env.db.lock().unwrap(), id, true).unwrap();
+        std::fs::write(env.root.join("p.txt"), "v2 not stored").unwrap();
+        env.fire(EventKind::Modify(ModifyKind::Any), &[&env.root.join("p.txt")]);
+        let hash = hex::encode(sha2::Sha256::digest(b"v2 not stored"));
+        assert!(!env.cas.exists(&hash));
+    }
 
     #[test]
     fn restore_with_live_watcher_keeps_file_listed() {

@@ -121,7 +121,6 @@ export function AddFolderDialog({ path, onConfirm, onCancel, isLoading }: Props)
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-border/40 bg-secondary/10">
           <button
             onClick={() => { setPatterns(''); }}

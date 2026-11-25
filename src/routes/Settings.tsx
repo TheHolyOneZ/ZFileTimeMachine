@@ -334,7 +334,6 @@ function GlobalSettingsPage() {
               </button>
             </div>
 
-            {/* Start on boot */}
             <div className="flex items-start justify-between gap-4 px-5 py-4">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-secondary/80 border border-border/50 flex items-center justify-center shrink-0 mt-0.5">
@@ -384,7 +383,6 @@ function GlobalSettingsPage() {
             subtitle="Configure global storage limits across all folders."
           />
 
-          {/* Dedup bento tiles */}
           {dedupStats && (
             <div className="grid grid-cols-3 gap-3 mb-5">
               <div className="rounded-xl border border-border/40 bg-secondary/20 p-3.5 flex flex-col">
