@@ -19,6 +19,15 @@ export function useSnapshots(fileId: number | undefined) {
   });
 }
 
+export function useLineStats(fileId: number | undefined) {
+  return useQuery({
+    queryKey: ['line-stats', fileId],
+    queryFn: () => api.getSnapshotLineStats(fileId!),
+    enabled: fileId != null,
+    staleTime: 30_000,
+  });
+}
+
 export function useDiff(snapshotId: number | undefined, againstCurrent = true) {
   return useQuery({
     queryKey: ['diff', snapshotId, againstCurrent],
@@ -41,6 +50,8 @@ export function useRewind() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['snapshots'] });
       qc.invalidateQueries({ queryKey: ['files'] });
+      qc.invalidateQueries({ queryKey: ['line-stats'] });
+      qc.invalidateQueries({ queryKey: ['diff'] });
     },
   });
 }
@@ -51,6 +62,7 @@ export function useManualSnapshot() {
     mutationFn: (fileId: number) => api.triggerManualSnapshot(fileId),
     onSuccess: (snap) => {
       qc.invalidateQueries({ queryKey: ['snapshots', snap.fileId] });
+      qc.invalidateQueries({ queryKey: ['line-stats', snap.fileId] });
       qc.invalidateQueries({ queryKey: ['files'] });
     },
   });

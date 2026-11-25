@@ -1,456 +1,297 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
-  ArrowLeft, Settings2, RefreshCw, FolderX, Loader2, Search, X,
-  MessageSquare, FileText, ArrowRight, Camera, Zap, Activity,
-  RotateCcw, History, PauseCircle,
+  Settings2, History, Pause, Play, Search, X, FileText, StickyNote, Activity, FolderX, ArrowLeft, MousePointerClick,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { useFolders } from '@/hooks/useFolders';
+import { useFolders, useToggleFolderPause } from '@/hooks/useFolders';
+import { useFiles, useSearchNotes } from '@/hooks/useTimeline';
 import { FolderIcon } from '@/components/FolderIcon';
-import { getColor } from '@/lib/folderAppearance';
-import { useFiles, useSearchNotes, useDiff, useRewind, useSnapshots } from '@/hooks/useTimeline';
-import { FolderBrowser } from '@/components/FolderBrowser';
+import { folderTint } from '@/lib/folderAppearance';
+import { CopyPath } from '@/components/ui/CopyPath';
+import { FileTree } from '@/components/FileTree';
+import { HistoryPane } from '@/components/HistoryPane';
 import { ScanProgress } from '@/components/ScanProgress';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { InfoTooltip } from '@/components/InfoTooltip';
 import { ActivityFeed } from '@/components/ActivityFeed';
-import { RewindDialog } from '@/components/RewindDialog';
-import { useLiveEvents } from '@/hooks/useLiveEvents';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Segmented } from '@/components/ui/Segmented';
+import { Button, IconButton } from '@/components/ui/Button';
+import { FileIcon } from '@/components/ui/FileIcon';
 import { useToast } from '@/context/ToastContext';
-import { formatPath } from '@/lib/tauri';
-import type { NoteHit } from '@/lib/types';
+import { gsap, dur } from '@/lib/motion';
+import type { FileEntry } from '@/lib/types';
 
-function FileListSkeleton() {
+type Tab = 'files' | 'activity' | 'notes';
+
+function NotesTab({ folderId, onOpenFile }: { folderId: number; onOpenFile: (fileId: number) => void }) {
+  const [query, setQuery] = useState('');
+  const { data: hits, isFetching } = useSearchNotes(folderId, query);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!listRef.current || !hits?.length) return;
+    gsap.fromTo(listRef.current.children, { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, stagger: 0.03, duration: dur(0.4), ease: 'zftm' });
+  }, [hits]);
+
   return (
-    <div className="animate-pulse p-2 space-y-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex items-center gap-2.5 px-4 py-2.5">
-          <div className="w-3 h-3 rounded bg-secondary shrink-0" />
-          <div className="w-3 h-3 rounded bg-secondary shrink-0" />
-          <div className="h-3 bg-secondary rounded" style={{ width: `${30 + (i * 17) % 40}%` }} />
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="px-6 pt-4 pb-3 shrink-0">
+        <div className="relative max-w-[560px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search notes on files and versions"
+            className="field !h-9 pl-9 text-sm"
+          />
         </div>
-      ))}
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-8 scroll-fade-y">
+        {!query.trim() && (
+          <div className="max-w-[420px] pt-10 mx-auto text-center">
+            <StickyNote size={22} className="mx-auto text-faint mb-3" />
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Notes you add to files or versions show up here. Add one from a file's history with the note button.
+            </p>
+          </div>
+        )}
+        {query.trim() && !isFetching && hits?.length === 0 && (
+          <p className="text-sm text-muted-foreground pt-8 text-center">No notes match “{query}”.</p>
+        )}
+        <div ref={listRef} className="max-w-[760px] space-y-2">
+          {hits?.map((hit) => {
+            const fileId = hit.kind === 'file' ? hit.id : hit.fileId;
+            return (
+              <button
+                key={`${hit.kind}-${hit.id}`}
+                onClick={() => fileId != null && onOpenFile(fileId)}
+                className="press group w-full text-left p-4 rounded-xl bg-card shadow-card hover:shadow-card-hover transition-shadow"
+              >
+                <div className="flex items-center gap-2.5">
+                  <FileIcon path={hit.label} size={14} className="text-muted-foreground" />
+                  <span className="text-sm font-medium truncate flex-1">{hit.label}</span>
+                  <span className="text-2xs text-faint shrink-0">
+                    {hit.kind === 'snapshot' && hit.createdAt ? `Version from ${format(new Date(hit.createdAt), 'MMM d, HH:mm')}` : 'Note on the file'}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2 leading-relaxed whitespace-pre-wrap line-clamp-3">{hit.note}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
 
-
-interface NoteRewindProps {
-  snapshotId: number;
-  fileId: number;
-  onClose: () => void;
-}
-
-function NoteRewindConnector({ snapshotId, fileId, onClose }: NoteRewindProps) {
-  const { data: snapshots } = useSnapshots(fileId);
-  const { data: diff } = useDiff(snapshotId, true);
-  const rewind = useRewind();
-  const { toast } = useToast();
-
-  const snapshot = snapshots?.find((s) => s.id === snapshotId);
-
-  if (!snapshot) {
-    return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-        <div className="bg-card border border-border rounded-xl p-6 flex items-center gap-3">
-          <Loader2 size={16} className="animate-spin-slow text-primary" />
-          <span className="text-sm text-muted-foreground">Loading snapshot…</span>
-        </div>
-      </div>
-    );
-  }
-
+function NoSelection({ files }: { files: FileEntry[] }) {
+  const versions = files.reduce((s, f) => s + f.snapshotCount, 0);
   return (
-    <RewindDialog
-      snapshot={snapshot}
-      diff={diff}
-      isPending={rewind.isPending}
-      onCancel={onClose}
-      onConfirm={(autoSave) => {
-        rewind.mutate(
-          { snapshotId: snapshot.id, autoSaveCurrent: autoSave },
-          {
-            onSuccess: () => { toast('success', 'File rewound successfully'); onClose(); },
-            onError: (e) => toast('error', `Rewind failed: ${String(e)}`),
-          },
-        );
-      }}
-    />
+    <div className="flex-1 grid place-items-center px-8">
+      <div className="text-center max-w-[300px]">
+        <MousePointerClick size={22} className="mx-auto text-faint mb-3" />
+        <p className="text-sm text-muted-foreground">Pick a file to see its history.</p>
+        <p className="text-xs text-faint mt-1.5">{files.length.toLocaleString()} files, {versions.toLocaleString()} versions in this folder.</p>
+      </div>
+    </div>
   );
 }
 
 export function FolderDetail() {
-  useLiveEvents();
-
   const { id } = useParams<{ id: string }>();
   const folderId = id ? parseInt(id, 10) : undefined;
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const { toast } = useToast();
 
   const { data: folders, isLoading: foldersLoading } = useFolders();
   const folder = folders?.find((f) => f.id === folderId);
+  const { data: files, isLoading, error } = useFiles(folderId);
+  const togglePause = useToggleFolderPause();
 
-  const { data: files, isLoading, refetch, isFetching, error } = useFiles(folderId);
+  const [tab, setTab] = useState<Tab>('files');
+  const [filter, setFilter] = useState('');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  const [fileSearch, setFileSearch] = useState('');
-  const [searchTab, setSearchTab] = useState<'files' | 'notes' | 'activity'>('files');
-  const [noteQuery, setNoteQuery] = useState('');
-  const { data: noteHits } = useSearchNotes(folderId, noteQuery);
-  const [jumpFileId, setJumpFileId] = useState<number | null>(null);
-  const [rewindTarget, setRewindTarget] = useState<{ snapshotId: number; fileId: number } | null>(null);
+  const requestedPath = params.get('file');
 
-  const totalSnapshots = files?.reduce((s, f) => s + f.snapshotCount, 0) ?? 0;
-
-  function jumpToFile(fileId: number) {
-    setJumpFileId(fileId);
-    setSearchTab('files');
-  }
-
-  function handleNoteHitRewind(hit: NoteHit) {
-    if (hit.kind === 'snapshot' && hit.fileId != null) {
-      setRewindTarget({ snapshotId: hit.id, fileId: hit.fileId });
+  useEffect(() => {
+    if (!files) return;
+    if (requestedPath) {
+      const match = files.find((f) => f.relPath === requestedPath);
+      if (match) { setSelectedId(match.id); setTab('files'); }
+      setParams((p) => { p.delete('file'); return p; }, { replace: true });
+      return;
     }
-  }
+    if (selectedId != null && files.some((f) => f.id === selectedId)) return;
+    const recent = [...files].filter((f) => f.lastSnapshotAt != null).sort((a, b) => (b.lastSnapshotAt ?? 0) - (a.lastSnapshotAt ?? 0))[0];
+    setSelectedId(recent?.id ?? null);
+  }, [files, requestedPath]);
+
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    gsap.fromTo(el, { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: dur(0.38), ease: 'zftm', clearProps: 'transform' });
+  }, [tab]);
+
+  const selectedFile = useMemo(() => files?.find((f) => f.id === selectedId) ?? null, [files, selectedId]);
+  const totalVersions = files?.reduce((s, f) => s + f.snapshotCount, 0) ?? 0;
 
   if (!foldersLoading && !folder) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground p-8 animate-fade-in">
-        <div className="w-16 h-16 rounded-xl bg-secondary/50 border border-border flex items-center justify-center">
-          <FolderX size={28} className="opacity-30" />
-        </div>
+      <div className="flex-1 grid place-items-center p-8">
         <div className="text-center">
-          <p className="text-sm font-medium">Folder not found</p>
-          <p className="text-xs text-muted-foreground/60 mt-0.5">It may have been removed or never existed</p>
+          <FolderX size={26} className="mx-auto text-faint mb-3" />
+          <p className="text-md font-medium">This folder isn't being watched</p>
+          <p className="text-sm text-muted-foreground mt-1">It may have been removed.</p>
+          <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-primary mt-4 hover:underline">
+            <ArrowLeft size={13} />Back to the overview
+          </Link>
         </div>
-        <Link to="/" className="flex items-center gap-1.5 text-primary text-sm hover:underline mt-1">
-          <ArrowLeft size={13} />Back to folders
-        </Link>
       </div>
     );
   }
-
-  const colorDef = folder ? getColor(folder.config.color) : getColor();
   const isPaused = folder?.paused ?? false;
 
-  const TABS = [
-    { id: 'files' as const,    icon: <FileText size={12} />,      label: 'Files',    count: files?.length },
-    { id: 'notes' as const,    icon: <MessageSquare size={12} />, label: 'Notes',    count: undefined },
-    { id: 'activity' as const, icon: <Activity size={12} />,      label: 'Activity', count: undefined },
-  ];
-
   return (
-    <div className="flex-1 overflow-hidden flex flex-col">
-
-
-      <div className="shrink-0 border-b border-border/70">
-
-        <div className="px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => navigate('/')}
-            className="p-1.5 rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground/60 hover:text-foreground shrink-0"
-            title="Back to folders"
-          >
-            <ArrowLeft size={15} />
-          </button>
-
-
-          <div className={`w-8 h-8 rounded-lg ${colorDef.bgClass} flex items-center justify-center shrink-0 relative`}>
-            <FolderIcon name={folder?.config.icon} size={16} className={colorDef.iconClass} />
-            <span
-              title={isPaused ? 'Watcher paused' : 'Watcher active'}
-              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card
-                          ${isPaused ? 'bg-amber-400' : 'bg-emerald-500'}`}
-            />
-          </div>
-
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="font-semibold text-foreground text-sm truncate leading-tight">
-                {folder?.displayName ?? <span className="inline-block w-32 h-3.5 bg-secondary/80 rounded animate-pulse" />}
-              </h1>
-              {folder && isPaused && (
-                <span className="shrink-0 text-[11px] px-1.5 rounded font-medium bg-amber-500/10 text-amber-400">
-                  Paused
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground/80 truncate font-mono mt-0.5 leading-tight" title={folder?.path}>
-              {formatPath(folder?.path ?? '')}
-            </p>
-          </div>
-
-
-          <div className="flex items-center gap-1 shrink-0">
-            <InfoTooltip
-              placement="bottom"
-              title="Folder view"
-              body={
-                <div className="space-y-1.5">
-                  <p><strong className="text-foreground/80">Click any file</strong> to expand its full version history.</p>
-                  <p>The <strong className="text-foreground/80"><Camera size={10} className="inline -mt-0.5 mr-0.5" />camera icon</strong> takes a manual snapshot right now.</p>
-                  <p>The <strong className="text-foreground/80"><MessageSquare size={10} className="inline -mt-0.5 mr-0.5" />note icon</strong> attaches a note to any file or snapshot.</p>
-                </div>
-              }
-            />
-
-            <button
-              onClick={() => void refetch()}
-              disabled={isFetching}
-              className="p-1.5 rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground/50 hover:text-foreground disabled:opacity-40"
-              title="Refresh file list"
-            >
-              {isFetching ? <Loader2 size={14} className="animate-spin-slow" /> : <RefreshCw size={14} />}
-            </button>
-
-            {folderId != null && (
-              <Link
-                to={`/folder/${folderId}/recover`}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium
-                           bg-primary/12 text-primary hover:bg-primary/20 transition-colors"
-                title="Recover — restore files from any snapshot"
-              >
-                <History size={12} />
-                Recover
-              </Link>
-            )}
-
-            {folderId != null && (
-              <Link
-                to={`/folder/${folderId}/settings`}
-                className="p-1.5 rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground/50 hover:text-foreground"
-                title="Folder settings"
-              >
-                <Settings2 size={14} />
-              </Link>
+    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <header
+        data-tauri-drag-region
+        className="shrink-0 flex items-center gap-3.5 pl-6 pt-5 pb-4"
+        style={{ paddingRight: 'max(1.25rem, var(--controls-space))' }}
+      >
+        <div className="w-11 h-11 rounded-[calc(12px*var(--rs))] bg-foreground/[0.055] shadow-[inset_0_0_0_1px_hsl(var(--line))] grid place-items-center shrink-0">
+          {folder ? <FolderIcon name={folder.config.icon} size={20} {...folderTint(folder.config.color)} /> : <div className="skeleton w-5 h-5" />}
+        </div>
+        <div data-tauri-drag-region className="flex-1 min-w-0">
+          <div data-tauri-drag-region className="flex items-center gap-2.5 min-w-0">
+            <h1 className="text-xl font-semibold truncate">{folder?.displayName ?? <span className="skeleton inline-block w-40 h-5 align-middle" />}</h1>
+            {folder && (
+              <span className={`shrink-0 inline-flex items-center gap-1.5 h-6 px-2 rounded-full text-2xs font-medium
+                                ${isPaused ? 'bg-foreground/[0.06] text-muted-foreground' : 'bg-positive/10 text-positive'}`}>
+                {isPaused ? <Pause size={10} /> : <span className="live-dot w-1.5 h-1.5 rounded-full bg-positive" />}
+                {isPaused ? 'Paused' : 'Watching'}
+              </span>
             )}
           </div>
+          <div className="mt-1 flex min-w-0"><CopyPath path={folder?.path ?? ''} className="text-xs" /></div>
         </div>
-
-
-        <div className="flex items-center gap-0 px-4 pt-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setSearchTab(tab.id)}
-              className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-medium transition-all
-                ${searchTab === tab.id
-                  ? 'text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-                }`}
+        {folderId != null && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <IconButton
+              label={isPaused ? 'Resume watching' : 'Pause watching'}
+              disabled={togglePause.isPending || !folder}
+              onClick={() => folder && togglePause.mutate(
+                { id: folder.id, paused: !isPaused },
+                { onSuccess: () => toast('info', isPaused ? `Watching ${folder.displayName} again.` : `Paused ${folder.displayName}. Nothing is saved until you resume.`) },
+              )}
             >
-              <span>{tab.icon}</span>
-              {tab.label}
-              {tab.count != null && tab.count > 0 && (
-                <span className="text-[11px] tabular-nums text-muted-foreground">
-                  {tab.count}
-                </span>
-              )}
+              {isPaused ? <Play size={16} /> : <Pause size={16} />}
+            </IconButton>
+            <IconButton label="Folder settings" onClick={() => navigate(`/folder/${folderId}/settings`)}>
+              <Settings2 size={16} />
+            </IconButton>
+            <Button icon={<History size={14} />} onClick={() => navigate(`/folder/${folderId}/recover`)} className="ml-1">
+              Recover files
+            </Button>
+          </div>
+        )}
+      </header>
 
-              {searchTab === tab.id && (
-                <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-t-full bg-primary" />
-              )}
-            </button>
-          ))}
-        </div>
+      <div className="shrink-0 flex items-center gap-4 px-6 pb-3">
+        <Segmented<Tab>
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Folder views"
+          options={[
+            { value: 'files', label: 'Files', icon: <FileText size={13} />, count: files?.length },
+            { value: 'activity', label: 'Activity', icon: <Activity size={13} /> },
+            { value: 'notes', label: 'Notes', icon: <StickyNote size={13} /> },
+          ]}
+        />
+        <div className="flex-1" />
+        {files && files.length > 0 && (
+          <span className="text-xs text-faint tabular-nums">{totalVersions.toLocaleString()} versions kept</span>
+        )}
       </div>
-
 
       {folderId != null && <ScanProgress folderId={folderId} />}
 
-
-      {searchTab !== 'activity' && (
-        <div className="px-4 py-2.5 border-b border-border/30 bg-card/10 shrink-0">
-          <div className="relative">
-            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
-            <input
-              type="text"
-              value={searchTab === 'files' ? fileSearch : noteQuery}
-              onChange={(e) => searchTab === 'files' ? setFileSearch(e.target.value) : setNoteQuery(e.target.value)}
-              placeholder={searchTab === 'files' ? 'Filter files by name…' : 'Search all notes…'}
-              className="w-full bg-secondary/30 border border-border/30 rounded-lg pl-8 pr-8 py-2 text-xs
-                         focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40
-                         placeholder:text-muted-foreground/50 transition-colors"
-            />
-            {(searchTab === 'files' ? fileSearch : noteQuery) && (
-              <button
-                onClick={() => searchTab === 'files' ? setFileSearch('') : setNoteQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground transition-colors"
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-
-      <div className="flex-1 min-h-0 flex flex-col">
-
-
-        {searchTab === 'activity' && folderId != null && (
-          <div className="flex-1 overflow-auto min-h-0">
-            <ActivityFeed folderId={folderId} />
-          </div>
-        )}
-
-
-        {searchTab === 'notes' && (
-          <div className="flex-1 overflow-auto min-h-0 p-4 space-y-2 animate-fade-in">
-            {!noteQuery.trim() && (
-              <div className="flex flex-col items-center justify-center py-14 gap-3 text-muted-foreground/70">
-                <div className="w-10 h-10 rounded-full bg-secondary/40 border border-border/30 flex items-center justify-center">
-                  <MessageSquare size={16} className="opacity-50" />
-                </div>
-                <p className="text-xs text-center leading-relaxed max-w-[200px]">
-                  Type above to search notes attached to files and snapshots
-                </p>
-              </div>
-            )}
-
-            {noteQuery.trim() && (!noteHits || noteHits.length === 0) && (
-              <p className="text-xs text-muted-foreground/50 text-center py-10">
-                No notes match "<span className="font-mono text-foreground/50">{noteQuery}</span>"
-              </p>
-            )}
-
-            {noteHits?.map((hit) => {
-              const targetFileId = hit.kind === 'file' ? hit.id : (hit.fileId ?? null);
-              const isSnapshot = hit.kind === 'snapshot';
-              return (
-                <button
-                  key={`${hit.kind}-${hit.id}`}
-                  onClick={() => targetFileId != null && jumpToFile(targetFileId)}
-                  className="w-full rounded-xl border border-border/40 bg-card/50 hover:bg-card/90
-                             hover:border-border/70 transition-all text-left group overflow-hidden"
-                >
-
-                  <div className={`h-[2px] w-full ${isSnapshot ? 'bg-purple-500/40' : 'bg-blue-500/40'}`} />
-                  <div className="p-3.5">
-                    <div className="flex items-start gap-2.5">
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border shrink-0 mt-0.5
-                        ${isSnapshot
-                          ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                        }`}>
-                        {hit.kind}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-mono text-foreground/75 truncate flex-1">{hit.label}</p>
-                          <ArrowRight size={11} className="text-muted-foreground/50 group-hover:text-primary/60 transition-colors shrink-0" />
-                        </div>
-                        {hit.createdAt && (
-                          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                            {format(new Date(hit.createdAt), 'MMM d, HH:mm')}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground/65 mt-2 leading-relaxed bg-secondary/30 rounded-lg px-3 py-2 text-left border border-border/20">
-                          {hit.note}
-                        </p>
-                        {isSnapshot && hit.fileId != null && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleNoteHitRewind(hit); }}
-                            className="mt-2.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/50 hover:text-primary transition-colors"
-                          >
-                            <RotateCcw size={10} />Rewind to this snapshot
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-
-        {searchTab === 'files' && (
-          <ErrorBoundary label="File list">
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              {isLoading ? (
-                <div className="overflow-auto flex-1"><FileListSkeleton /></div>
-              ) : error ? (
-                <div className="m-4 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-                  <p className="font-medium">Failed to load files</p>
-                  <p className="text-xs mt-1 opacity-70">{String(error)}</p>
-                </div>
-              ) : (
-                <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                  {files && files.length > 0 && files.every((f) => f.snapshotCount === 0) && (
-                    <div className="mx-4 mt-4 mb-1 p-3.5 rounded-xl border border-primary/15 bg-primary/5 text-xs text-primary/75 flex items-start gap-2.5 shrink-0">
-                      <Zap size={13} className="shrink-0 mt-0.5 text-primary/60" />
-                      <span className="leading-relaxed">
-                        Files found — snapshots appear here automatically when you save, or click the
-                        <Camera size={10} className="inline mx-1 -mt-0.5" />
-                        camera icon for a manual snapshot now.
-                      </span>
-                    </div>
-                  )}
-                  <FolderBrowser
-                    folderId={folderId!}
-                    files={files ?? []}
-                    filter={fileSearch}
-                    autoOpenFileId={jumpFileId}
-                    onAutoOpened={() => setJumpFileId(null)}
+      <div ref={contentRef} className="flex-1 min-h-0 flex border-t border-[hsl(var(--line))]">
+        {tab === 'files' && (
+          <ErrorBoundary label="Files">
+            <aside className="w-[292px] shrink-0 flex flex-col border-r border-[hsl(var(--line))] bg-surface-sunken/40">
+              <div className="p-2.5 shrink-0">
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
+                  <input
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setFilter(''); }}
+                    placeholder="Filter files"
+                    className="field !h-8 pl-8 pr-7 text-sm"
+                    aria-label="Filter files"
                   />
+                  {filter && (
+                    <button onClick={() => setFilter('')} aria-label="Clear filter" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center rounded-full text-faint hover:text-foreground hover:bg-foreground/[0.08]">
+                      <X size={11} />
+                    </button>
+                  )}
                 </div>
+              </div>
+              {isLoading ? (
+                <div className="px-3 space-y-1">
+                  {[60, 42, 75, 50, 66, 38].map((w, i) => (
+                    <div key={i} className="flex items-center gap-2 h-[30px] px-2">
+                      <div className="skeleton w-4 h-4" />
+                      <div className="skeleton h-3" style={{ width: `${w}%` }} />
+                    </div>
+                  ))}
+                </div>
+              ) : error ? (
+                <p className="m-3 p-3 rounded-lg bg-negative/10 text-sm text-negative">Couldn't load the files: {String(error)}</p>
+              ) : (
+                <FileTree
+                  folderId={folderId!}
+                  files={files ?? []}
+                  filter={filter}
+                  selectedId={selectedId}
+                  onSelect={(f) => setSelectedId(f.id)}
+                />
               )}
-            </div>
+            </aside>
+            {selectedFile ? <HistoryPane key={folderId} file={selectedFile} folderPath={folder?.path ?? ''} /> : files && <NoSelection files={files} />}
           </ErrorBoundary>
+        )}
+
+        {tab === 'activity' && folderId != null && (
+          <ActivityFeed
+            folderId={folderId}
+            onOpenFile={(relPath) => {
+              const f = files?.find((x) => x.relPath === relPath);
+              if (f) { setSelectedId(f.id); setTab('files'); }
+            }}
+          />
+        )}
+
+        {tab === 'notes' && folderId != null && (
+          <NotesTab folderId={folderId} onOpenFile={(fid) => { setSelectedId(fid); setTab('files'); }} />
         )}
       </div>
 
-
-      {files && files.length > 0 && (
-        <div className="border-t border-border/40 px-5 py-2 flex items-center gap-3 shrink-0 bg-card/20">
-          <span className="text-[11px] text-muted-foreground/50">
-            {files.length} file{files.length !== 1 ? 's' : ''}
-          </span>
-
-          {totalSnapshots > 0 && (
-            <>
-              <span className="text-border/40 text-[11px]">·</span>
-              <span className="text-[11px] text-muted-foreground/50">
-                {totalSnapshots} snapshot{totalSnapshots !== 1 ? 's' : ''}
-              </span>
-            </>
-          )}
-
-          {files.filter((f) => f.isBinary).length > 0 && (
-            <>
-              <span className="text-border/40 text-[11px]">·</span>
-              <span className="text-[11px] text-muted-foreground/70">
-                {files.filter((f) => f.isBinary).length} binary
-              </span>
-            </>
-          )}
-
-          {isPaused && (
-            <>
-              <span className="text-border/40 text-[11px]">·</span>
-              <span className="flex items-center gap-1 text-[11px] text-amber-400/70">
-                <PauseCircle size={10} />Watcher paused
-              </span>
-            </>
-          )}
-
-          {fileSearch && searchTab === 'files' && (
-            <span className="ml-auto text-[11px] text-muted-foreground/60 font-mono">
-              "{fileSearch}"
-            </span>
-          )}
+      {isPaused && (
+        <div className="shrink-0 flex items-center gap-3 px-6 h-10 border-t border-[hsl(var(--line))] bg-foreground/[0.025] text-xs text-muted-foreground">
+          <Pause size={12} className="shrink-0" />
+          <span className="flex-1">Watching is paused. Changes to files in this folder aren't saved until you resume.</span>
+          <button
+            onClick={() => folder && togglePause.mutate({ id: folder.id, paused: false })}
+            className="press inline-flex items-center gap-1 h-6 px-2 rounded-md text-xs font-medium text-foreground hover:bg-foreground/[0.07]"
+          >
+            <Play size={11} />Resume
+          </button>
         </div>
-      )}
-
-
-      {rewindTarget && (
-        <NoteRewindConnector
-          snapshotId={rewindTarget.snapshotId}
-          fileId={rewindTarget.fileId}
-          onClose={() => setRewindTarget(null)}
-        />
       )}
     </div>
   );

@@ -1,48 +1,42 @@
-import { createPortal } from 'react-dom';
-import { X, Keyboard } from 'lucide-react';
+import { Keyboard } from 'lucide-react';
+import { Sheet, SheetHeader } from './ui/Sheet';
+import { IS_MAC } from '@/lib/platform';
 
-const SHORTCUTS = [
-  { key: '?', desc: 'Show keyboard shortcuts' },
-  { key: 'Esc', desc: 'Close any open popup or dialog' },
-  { key: 'Enter', desc: 'Open/activate focused item' },
-  { key: 'Right-click', desc: 'Open context menu on folder, file, or snapshot' },
-  { key: 'Ctrl+F / ⌘F', desc: 'Focus search bar' },
+const MOD = IS_MAC ? '⌘' : 'Ctrl';
+
+const SHORTCUTS: { keys: string[]; desc: string }[] = [
+  { keys: [MOD, 'K'], desc: 'Search files, folders and actions' },
+  { keys: [MOD, 'B'], desc: 'Show or hide the sidebar' },
+  { keys: ['↑', '↓'], desc: 'Move through files and versions' },
+  { keys: ['↵'], desc: 'Restore the selected version' },
+  { keys: [MOD, 'F'], desc: 'Find in a comparison' },
+  { keys: [MOD, '↵'], desc: 'Save a note' },
+  { keys: [MOD, 'S'], desc: 'Save changed settings' },
+  { keys: [MOD, 'A'], desc: 'Select every file when recovering' },
+  { keys: ['Esc'], desc: 'Close a dialog or menu' },
+  { keys: ['Right-click'], desc: 'More actions for a folder, file or version' },
+  { keys: ['?'], desc: 'Show this list' },
 ];
 
-interface Props { onClose: () => void }
-
-export function KeyboardShortcuts({ onClose }: Props) {
-  return createPortal(
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-fade-in"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-popover border border-border/60 rounded-xl w-full max-w-sm overflow-hidden
-                      shadow-overlay animate-scale-in">
-        <div className="flex items-center justify-between px-4 py-3 bg-secondary/30 border-b border-border/50">
-          <div className="flex items-center gap-2">
-            <Keyboard size={13} className="text-primary/70" />
-            <span className="text-sm font-semibold">Keyboard shortcuts</span>
+export function KeyboardShortcuts({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Sheet open={open} onClose={onClose} width={420} label="Keyboard shortcuts">
+      <SheetHeader icon={<Keyboard size={18} />} title="Keyboard shortcuts" onClose={onClose} />
+      <div className="px-6 pt-2 pb-6">
+        {SHORTCUTS.map(({ keys, desc }) => (
+          <div key={desc} className="flex items-center justify-between gap-4 py-2 border-b border-[hsl(var(--line))] last:border-0">
+            <span className="text-sm text-muted-foreground">{desc}</span>
+            <span className="flex gap-1 shrink-0">
+              {keys.map((k) => (
+                <kbd key={k} className="min-w-[24px] h-6 px-1.5 grid place-items-center rounded-[calc(6px*var(--rs))] text-xs font-sans text-foreground/85
+                                        bg-foreground/[0.06] shadow-[inset_0_-1px_0_hsl(var(--line-strong)),inset_0_0_0_1px_hsl(var(--line))]">
+                  {k}
+                </kbd>
+              ))}
+            </span>
           </div>
-          <button onClick={onClose} className="p-1 rounded text-muted-foreground/70 hover:text-foreground transition-colors">
-            <X size={13} />
-          </button>
-        </div>
-        <div className="p-4 space-y-1">
-          {SHORTCUTS.map(({ key, desc }) => (
-            <div key={key} className="flex items-center gap-3 py-1.5">
-              <kbd className="shrink-0 px-2 py-0.5 text-[11px] font-mono bg-secondary/60 border border-border/60 rounded-md text-foreground/70 min-w-[2rem] text-center">
-                {key}
-              </kbd>
-              <span className="text-xs text-muted-foreground/70">{desc}</span>
-            </div>
-          ))}
-        </div>
-        <div className="px-4 py-2.5 border-t border-border/40 bg-secondary/10">
-          <p className="text-[10px] text-muted-foreground/70">Press <kbd className="px-1 font-mono bg-secondary/60 border border-border/60 rounded text-[10px]">?</kbd> or <kbd className="px-1 font-mono bg-secondary/60 border border-border/60 rounded text-[10px]">Esc</kbd> to close</p>
-        </div>
+        ))}
       </div>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }

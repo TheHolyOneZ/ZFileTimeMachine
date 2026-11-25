@@ -1,0 +1,17 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "ZFileTimeMachine",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "label": "main",
+        "decorations": false,
+        "shadow": false,
+        "transparent": true
+      }
+    ]
+  }
+}

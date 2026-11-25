@@ -1,6 +1,6 @@
 [package]
 name = "zfiletimemachine"
-version = "0.2.1"
+version = "0.3.0"
 description = "Automatic, private version history for any folder on your computer."
 authors = ["TheHolyOneZ"]
 license = "GPL-3.0-or-later"
@@ -22,54 +22,41 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
 
-# File watching
 notify = "6"
 notify-debouncer-full = "0.3"
 
-# Database
 rusqlite = { version = "0.31", features = ["bundled"] }
 
-# Hashing
 sha2 = "0.10"
 hex = "0.4"
 
-# Diffing
 similar = { version = "2", features = ["text"] }
 
-# Ignore patterns (gitignore-style)
 ignore = "0.4"
 
-# Concurrency
 dashmap = "6"
 tokio = { version = "1", features = ["full"] }
 
-# Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Error handling
 thiserror = "1"
 
-# Platform data directories
 directories = "5"
 
-# Time
 chrono = { version = "0.4", features = ["serde"] }
 
-# Compression (Feature 8)
 zstd = "0.13"
 
-# Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
-# Already in the tree via tao; used to enable the undecorated-window shadow only on Windows 11+.
 windows-version = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
-# Mock runtime so watcher logic can be exercised in tests without opening a window.
 tauri = { version = "2", features = ["tray-icon", "test"] }
 
 [features]

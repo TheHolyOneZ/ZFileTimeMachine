@@ -64,6 +64,12 @@ export interface Snapshot {
   note: string | null;
 }
 
+export interface SnapshotLineStats {
+  snapshotId: number;
+  added: number | null;
+  removed: number | null;
+}
+
 export interface NoteHit {
   kind: 'file' | 'snapshot';
   id: number;
@@ -239,4 +245,14 @@ export interface RecoverProgressPayload {
   processed: number;
   total: number;
   currentPath: string;
+}
+
+export interface DirEntryInfo {
+  name: string;
+  relPath: string;
+  isDir: boolean;
+  size: number | null;
+  items: number | null;
+  ignored: boolean;
+  protected: boolean;
 }

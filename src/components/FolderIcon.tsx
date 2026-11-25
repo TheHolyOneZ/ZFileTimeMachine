@@ -22,11 +22,12 @@ interface Props {
   name?: string;
   size?: number;
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export function FolderIcon({ name, size = 20, className }: Props) {
+export function FolderIcon({ name, size = 20, className, style }: Props) {
   const Icon = (name && ICON_MAP[name]) ? ICON_MAP[name] : Folder;
-  return <Icon size={size} className={className} />;
+  return <Icon size={size} className={className} style={style} />;
 }
 
 export { ICON_MAP };

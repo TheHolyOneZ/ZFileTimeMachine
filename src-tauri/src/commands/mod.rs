@@ -1,3 +1,5 @@
+pub mod appearance;
+pub mod browse;
 pub mod dev;
 pub mod folders;
 pub mod notes;

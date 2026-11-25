@@ -1,134 +1,85 @@
+import { useLayoutEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { format, isToday, isYesterday } from 'date-fns';
+import { Camera, Trash2, RotateCcw, ScanLine, RefreshCw, History, ShieldOff, Clock, Undo2, Pencil, Activity } from 'lucide-react';
 import { listActivityLog } from '@/lib/tauri';
-import { formatDistanceToNow, format } from 'date-fns';
-import { Camera, Trash2, RotateCcw, Zap, AlertCircle, History, RefreshCw, ShieldOff } from 'lucide-react';
+import { gsap, dur } from '@/lib/motion';
 import type { ActivityEntry } from '@/lib/types';
 
 interface Props {
   folderId: number;
+  onOpenFile?: (relPath: string) => void;
 }
 
-const ACTION_META: Record<string, {
-  icon: React.ReactNode;
-  label: string;
-  colors: string;
-}> = {
-  snapshot_created: {
-    icon: <Camera size={11} />,
-    label: 'Snapshot',
-    colors: 'bg-emerald-500/15 text-emerald-400',
-  },
-  file_deleted: {
-    icon: <Trash2 size={11} />,
-    label: 'Deleted',
-    colors: 'bg-destructive/15 text-destructive/80',
-  },
-  rewind: {
-    icon: <RotateCcw size={11} />,
-    label: 'Rewound',
-    colors: 'bg-primary/15 text-primary',
-  },
-  scan_complete: {
-    icon: <Zap size={11} />,
-    label: 'Scan complete',
-    colors: 'bg-amber-500/15 text-amber-400',
-  },
-  watcher_restart: {
-    icon: <AlertCircle size={11} />,
-    label: 'Watcher restarted',
-    colors: 'bg-amber-500/15 text-amber-400',
-  },
-  bulk_recover: {
-    icon: <History size={11} />,
-    label: 'Recovery',
-    colors: 'bg-purple-500/15 text-purple-400',
-  },
-  app_data_excluded: {
-    icon: <ShieldOff size={11} />,
-    label: 'App data skipped',
-    colors: 'bg-secondary/80 text-muted-foreground/70',
-  },
-};
-
-function getDefaultMeta(action: string) {
-  return {
-    icon: <RefreshCw size={11} />,
-    label: action.replace(/_/g, ' '),
-    colors: 'bg-secondary/80 text-muted-foreground/60',
-  };
+function describe(e: ActivityEntry): { icon: React.ReactNode; title: string; detail?: string; tone?: 'neg' | 'accent' } {
+  switch (e.action) {
+    case 'snapshot_created': {
+      const by: Record<string, { icon: React.ReactNode; title: string }> = {
+        manual: { icon: <Camera size={13} />, title: 'Saved by hand' },
+        interval: { icon: <Clock size={13} />, title: 'Saved on schedule' },
+        'pre-rewind': { icon: <Undo2 size={13} />, title: 'Kept before a restore' },
+        initial: { icon: <ScanLine size={13} />, title: 'First version' },
+      };
+      return by[e.reason ?? ''] ?? { icon: <Pencil size={13} />, title: 'Saved' };
+    }
+    case 'file_deleted': return { icon: <Trash2 size={13} />, title: 'Deleted', tone: 'neg' };
+    case 'rewind': return { icon: <RotateCcw size={13} />, title: 'Restored an earlier version', tone: 'accent' };
+    case 'bulk_recover': return { icon: <History size={13} />, title: 'Recovered files', detail: e.reason ?? undefined, tone: 'accent' };
+    case 'watcher_restart': return { icon: <RefreshCw size={13} />, title: 'Watching restarted' };
+    case 'scan_complete': {
+      const kv = Object.fromEntries((e.reason ?? '').split(' ').map((p) => p.split('=')));
+      const total = kv.total;
+      const changed = kv.new_or_changed ?? kv.new;
+      return {
+        icon: <ScanLine size={13} />,
+        title: 'Checked the folder',
+        detail: total !== undefined && changed !== undefined
+          ? `${Number(total).toLocaleString()} files looked at, ${Number(changed).toLocaleString()} new or changed`
+          : undefined,
+      };
+    }
+    case 'app_data_excluded': {
+      const removed = (e.reason ?? '').match(/removed=(\d+)/)?.[1];
+      return {
+        icon: <ShieldOff size={13} />,
+        title: "Skipped ZFileTimeMachine's own data",
+        detail: removed ? `${Number(removed).toLocaleString()} ${removed === '1' ? 'file' : 'files'} removed from tracking` : undefined,
+      };
+    }
+    default: return { icon: <Activity size={13} />, title: e.action.replace(/_/g, ' ') };
+  }
 }
 
-function getDateLabel(ts: number): string {
+function dayLabel(ts: number) {
   const d = new Date(ts);
-  const now = new Date();
-  const todayStr = now.toDateString();
-  const yestStr = new Date(now.getTime() - 86_400_000).toDateString();
-  if (d.toDateString() === todayStr) return 'Today';
-  if (d.toDateString() === yestStr) return 'Yesterday';
-  return format(d, 'MMMM d');
+  if (isToday(d)) return 'Today';
+  if (isYesterday(d)) return 'Yesterday';
+  return format(d, 'EEEE, MMMM d');
 }
 
-interface Group {
-  label: string;
-  entries: ActivityEntry[];
-}
-
-function groupByDay(entries: ActivityEntry[]): Group[] {
-  const groups: Group[] = [];
-  let current: Group | null = null;
-  for (const e of entries) {
-    const label = getDateLabel(e.timestamp);
-    if (!current || current.label !== label) {
-      current = { label, entries: [] };
-      groups.push(current);
-    }
-    current.entries.push(e);
-  }
-  return groups;
-}
-
-function humanizeReason(action: string, reason: string): string {
-  if (action === 'scan_complete') {
-    const kv = Object.fromEntries(reason.split(' ').map((p) => p.split('=')));
-    const total = kv.total;
-    const changed = kv.new_or_changed ?? kv.new;
-    if (total !== undefined && changed !== undefined) {
-      return `${total} file${total === '1' ? '' : 's'} checked · ${changed} new or changed`;
-    }
-  }
-  if (action === 'app_data_excluded') {
-    const removed = reason.match(/removed=(\d+)/)?.[1];
-    if (removed !== undefined) {
-      return `ZFileTimeMachine's own data folder is never snapshotted · ${removed} file${removed === '1' ? '' : 's'} removed from tracking`;
-    }
-  }
-  const SOURCES: Record<string, string> = {
-    change: 'Saved', manual: 'Taken manually', interval: 'Scheduled', 'pre-rewind': 'Backup before a rewind', initial: 'First scan',
-  };
-  return SOURCES[reason] ?? reason;
-}
-
-export function ActivityFeed({ folderId }: Props) {
+export function ActivityFeed({ folderId, onOpenFile }: Props) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const animated = useRef(false);
   const { data: entries, isLoading } = useQuery({
     queryKey: ['activity', folderId],
-    queryFn: () => listActivityLog(folderId, 100),
-    refetchInterval: 3_000,
+    queryFn: () => listActivityLog(folderId, 200),
+    refetchInterval: 5_000,
   });
+
+  useLayoutEffect(() => {
+    if (!entries?.length || !listRef.current || animated.current) return;
+    animated.current = true;
+    const rows = listRef.current.querySelectorAll('[data-row]');
+    gsap.fromTo(rows, { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: dur(0.45), stagger: Math.min(0.02, 0.6 / rows.length), ease: 'zftm', clearProps: 'transform' });
+  }, [entries]);
 
   if (isLoading) {
     return (
-      <div className="p-4 space-y-3 animate-pulse">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex items-start gap-3 px-3">
-            <div className="w-6 h-6 rounded-full bg-secondary/60 shrink-0 mt-0.5" />
-            <div className="flex-1 space-y-1.5 pt-0.5">
-              <div className="flex items-center gap-2">
-                <div className="h-2.5 bg-secondary rounded-full w-20" />
-                <div className="h-2.5 bg-secondary/50 rounded-full w-32" />
-              </div>
-              <div className="h-2 bg-secondary/30 rounded-full w-16" />
-            </div>
-            <div className="h-2 bg-secondary/30 rounded-full w-12 mt-1 shrink-0" />
+      <div className="flex-1 px-6 pt-5 space-y-3">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="skeleton w-7 h-7 rounded-full" />
+            <div className="skeleton h-3" style={{ width: `${30 + i * 8}%` }} />
           </div>
         ))}
       </div>
@@ -137,75 +88,61 @@ export function ActivityFeed({ folderId }: Props) {
 
   if (!entries || entries.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground/70">
-        <div className="w-10 h-10 rounded-full bg-secondary/40 border border-border/30 flex items-center justify-center">
-          <Zap size={18} className="opacity-40" />
+      <div className="flex-1 grid place-items-center px-8 text-center">
+        <div>
+          <Activity size={22} className="mx-auto text-faint mb-3" />
+          <p className="text-sm text-muted-foreground">Nothing has happened in this folder yet.</p>
         </div>
-        <p className="text-xs">No activity yet — snapshots will appear here as you work</p>
       </div>
     );
   }
 
-  const groups = groupByDay(entries);
+  const groups: { label: string; items: ActivityEntry[] }[] = [];
+  for (const e of entries) {
+    const label = dayLabel(e.timestamp);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(e); else groups.push({ label, items: [e] });
+  }
 
   return (
-    <div className="overflow-y-auto py-2">
-      {groups.map((group) => (
-        <div key={group.label}>
-
-          <div className="flex items-center gap-3 px-4 py-2">
-            <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-              {group.label}
-            </span>
-            <div className="flex-1 h-px bg-border/20" />
-          </div>
-
-
-          {group.entries.map((entry, idx) => {
-            const meta = ACTION_META[entry.action] ?? getDefaultMeta(entry.action);
-            const isLast = idx === group.entries.length - 1;
-
-            return (
-              <div key={entry.id} className="relative flex items-start gap-3 px-4 py-2 hover:bg-secondary/20 transition-colors group">
-
-                {!isLast && (
-                  <div className="absolute left-[25px] top-8 bottom-0 w-px bg-border/20 pointer-events-none" />
-                )}
-
-
-                <div className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${meta.colors}`}>
-                  {meta.icon}
-                </div>
-
-
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className="text-xs font-medium text-foreground/80">{meta.label}</span>
-                    {entry.relPath && (
-                      <span className="text-xs font-mono text-foreground/70 truncate">
-                        {entry.relPath}
-                      </span>
-                    )}
-                  </div>
-                  {entry.reason && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      {humanizeReason(entry.action, entry.reason)}
-                    </p>
-                  )}
-                </div>
-
-
-                <span
-                  className="text-[11px] text-muted-foreground shrink-0 mt-0.5"
-                  title={format(new Date(entry.timestamp), 'PPpp')}
+    <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-4 pb-10 scroll-fade-y">
+      <div className="max-w-[820px]">
+        {groups.map((g) => (
+          <section key={g.label}>
+            <h3 data-row className="px-3 pt-5 pb-2 text-2xs font-medium text-faint">{g.label}</h3>
+            {g.items.map((e, idx) => {
+              const d = describe(e);
+              const clickable = !!(e.relPath && onOpenFile && e.action !== 'file_deleted');
+              const last = idx === g.items.length - 1;
+              const Tag = clickable ? 'button' : 'div';
+              return (
+                <Tag
+                  key={e.id}
+                  data-row
+                  onClick={clickable ? () => onOpenFile!(e.relPath!) : undefined}
+                  className={`relative w-full flex items-start gap-3 px-3 py-2 rounded-[calc(9px*var(--rs))] text-left ${clickable ? 'hover:bg-foreground/[0.04]' : ''}`}
                 >
-                  {formatDistanceToNow(new Date(entry.timestamp), { addSuffix: true })}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ))}
+                  {!last && <span className="absolute left-[25px] top-9 -bottom-1 w-px bg-[hsl(var(--line))]" aria-hidden />}
+                  <span className={`relative w-7 h-7 rounded-full grid place-items-center shrink-0 shadow-[inset_0_0_0_1px_hsl(var(--line))]
+                                    ${d.tone === 'neg' ? 'bg-negative/10 text-negative' : d.tone === 'accent' ? 'bg-primary/12 text-primary' : 'bg-surface-raised text-muted-foreground'}`}>
+                    {d.icon}
+                  </span>
+                  <span className="flex-1 min-w-0 pt-1">
+                    <span className="flex items-baseline gap-2 min-w-0">
+                      <span className="text-sm text-foreground shrink-0">{d.title}</span>
+                      {e.relPath && <span className="text-sm text-muted-foreground font-mono truncate">{e.relPath}</span>}
+                    </span>
+                    {d.detail && <span className="block text-xs text-faint mt-0.5">{d.detail}</span>}
+                  </span>
+                  <time className="text-xs text-faint shrink-0 pt-1.5 tabular-nums" title={format(new Date(e.timestamp), 'PPpp')}>
+                    {format(new Date(e.timestamp), 'HH:mm')}
+                  </time>
+                </Tag>
+              );
+            })}
+          </section>
+        ))}
+      </div>
     </div>
   );
 }

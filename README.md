@@ -12,7 +12,7 @@
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri%202-24C8DB?logo=tauri)](https://tauri.app)
 [![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?logo=react)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Backend-Rust-CE422B?logo=rust)](https://www.rust-lang.org)
-[![Version](https://img.shields.io/badge/version-0.2.1-3b82f6)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-3b82f6)](CHANGELOG.md)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows%20%7C%20macOS-555)](#platform-support)
 [![Download](https://img.shields.io/badge/Download-zsync.eu%2Fzftm-3b82f6)](https://zsync.eu/zftm/)
 
@@ -33,7 +33,18 @@ No cloud. No git. No command line. Just your files, safely versioned, on your ow
 
 ---
 
-## What's new in 0.2.1
+## What's new in 0.3.0
+
+- **A completely new interface.** Your folders live in a sidebar, and a folder opens as a file tree next to the file's history. Versions are grouped by day and show how many lines each one added and removed. The comparison sits right beside the list, with unchanged stretches folded away, and one button restores the version you're looking at.
+- **Image previews.** For pictures, a version is shown next to the file as it is now.
+- **Find any file** with `Ctrl K` / `⌘ K`, across every watched folder.
+- **Choose what to watch, file by file.** When you add a folder, its contents show up as a tree. Untick whatever you don't want versions of.
+- **Themes.** Seven themes for dark and light, any accent color you like (folder icons follow it, or get their own color), and corners from sharp to round.
+- **More control per folder.** Choose when versions are saved (every save, every save plus a schedule, or only by hand) and how long they're kept (a number of versions, a number of days, or both).
+- **Native window material** on macOS (translucent sidebar) and Windows 11 (Mica).
+- Smooth, restrained motion throughout, which steps aside if your system asks for reduced motion.
+
+### 0.2.1
 
 - **The app never snapshots its own data.** Fixes [#2](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues/2), where watching a folder that contains ZFileTimeMachine's data folder (such as `~/Library/Application Support` on macOS) made it snapshot its own snapshots without end. That folder is now always skipped, and files from it that were already tracked are cleaned up on the next start.
 - **Folder ignore rules work on live changes.** Rules like `Cache/` or `node_modules/` used to apply only to the first scan. Every later change inside those folders is now skipped too.
@@ -50,16 +61,16 @@ See the full [changelog](CHANGELOG.md).
 
 ## Screenshots
 
-| Watched folders | File timeline |
+| Overview | A file's history |
 |---|---|
-| ![Dashboard with three watched folders](docs/screenshot-dashboard.png) | ![A file's snapshot timeline](docs/screenshot-timeline.png) |
-| **Rewind with diff preview** | **Bulk recovery** |
-| ![Rewind dialog showing a diff](docs/screenshot-rewind.png) | ![Recover screen with a file's snapshot list](docs/screenshot-recover.png) |
+| ![Overview with four watched folders and recent changes](docs/screenshot-dashboard.png) | ![File tree, a file's versions grouped by day, and the comparison with the file now](docs/screenshot-timeline.png) |
+| **Restoring a version** | **Recovering many files** |
+| ![Restore dialog with the line counts and the option to keep the current file](docs/screenshot-rewind.png) | ![Recover screen with selected files and the version options](docs/screenshot-recover.png) |
 
 <details>
 <summary>Light theme</summary>
 
-![File timeline in the light theme](docs/screenshot-light.png)
+![A file's history in the light theme](docs/screenshot-light.png)
 
 </details>
 
@@ -132,38 +143,39 @@ ZFileTimeMachine sits in a gap nothing else fills: **automatic, per-file, local,
 
 ### Automatic Snapshots
 
-ZFileTimeMachine watches your folder continuously. When a file changes, it captures a snapshot. You choose how this works per folder:
+ZFileTimeMachine watches your folder continuously. When a file changes, it captures a snapshot. You choose how this works per folder, in its settings under **Versions**:
 
-- **On Change** — snapshot the moment a file is saved
-- **Interval** — snapshot every X minutes, regardless of changes
-- **Manual** — only when you click the camera icon yourself
-- **Hybrid** *(recommended)* — debounce rapid changes AND take periodic checkpoints
+- **Every save** *(default)*: a snapshot a moment after each save. Several saves in quick succession count as one, and you set how long that moment is.
+- **Every save and on a schedule**: the same, plus a check of the whole folder every few minutes that catches any change a save event missed.
+- **Only by hand**: nothing is saved automatically. Use the camera button on a file.
+
+You can also limit how often one file gets a snapshot (useful when a formatter rewrites the same file many times in a row).
 
 > [!IMPORTANT]
 > Snapshots are not copies of your entire folder. The app uses a **content-addressed store** — only the unique content of each changed file is saved, deduplicated by hash. Two files with identical content take up space only once. This keeps storage usage surprisingly small even across hundreds of versions.
 
 ---
 
-### File Timeline & Diff Viewer
+### File History & Comparison
 
-Every tracked file has a **full timeline** showing every version ever saved. Click any entry to see:
+Every tracked file has a **full history** of every version ever saved, grouped by day. For each version you see:
 
-- **What changed** — a line-by-line diff (green = added, red = removed)
-- **When it changed** — exact timestamp
-- **How much it changed** — byte delta from the previous version
-- **Why it was captured** — `change`, `interval`, `manual`, or `pre-rewind`
-- **Your notes** — attach a personal note to any snapshot
+- **How much changed**: the lines it added and removed compared with the version before it
+- **When**: the time, and how long ago for today's versions
+- **How it was captured**: small icons mark versions saved by hand, on a schedule, or kept before a restore
+- **Your notes**: attach a personal note to any version
+- Which version matches the file on disk, marked **Current**
 
-The diff viewer supports **search** (including regex), so you can find exactly when a specific line was introduced, changed, or removed across the entire history of a file.
+Select a version and the comparison with the file as it is now appears beside the list. Unchanged stretches are folded so the changes come first (or turn on **Always show the whole file**), and `Ctrl F` searches the comparison (regular expressions work too). Pictures are shown side by side instead: the version next to the file now.
 
 ---
 
-### One-Click Rewind
+### One-Click Restore
 
-Found the version you need? Click **Rewind**. The app:
+Found the version you need? Click **Restore this version** (or double-click it, or press `Enter`). The app:
 
-1. Shows you a full diff of exactly what will change
-2. Optionally saves your current file as a new snapshot first *(so you can undo the rewind)*
+1. Shows how many lines will come back and go away
+2. Optionally saves your current file as a new snapshot first *(on by default, so you can undo the restore)*
 3. Atomically replaces the file with the chosen version and verifies the write was successful
 
 > [!CAUTION]
@@ -210,7 +222,7 @@ You control how many snapshots are kept per folder, so your storage doesn't grow
 |---|---|
 | **Keep Last N** | Always keep the most recent N snapshots per file |
 | **Time-Based** | Keep all snapshots from the last X days |
-| **Hybrid** | Keep the last N snapshots AND anything within the last X days |
+| **Both** | Keep at most N snapshots per file, and none older than X days |
 
 Old snapshots are cleaned up automatically. The deduplication store is garbage-collected so freed snapshots actually free disk space.
 
@@ -222,7 +234,7 @@ ZFileTimeMachine tracks binary files (images, compiled outputs, archives) with s
 
 - Configurable **maximum size** per binary file (default: 50 MB)
 - Configurable **maximum copies** kept (default: 3 most recent)
-- Binary files appear in the timeline but diffs are unavailable — you can still rewind them
+- Binary files appear in the history but there's no line comparison (images get a side-by-side preview instead), and you can still restore them
 - Files exceeding your size limit are tracked in the database but not snapshotted
 
 ---
@@ -243,7 +255,7 @@ The **Settings** screen shows you exactly what is happening with your storage:
 - Logical size vs. physical size (how much space deduplication is saving you)
 - Per-file storage breakdown for any folder
 - A built-in **integrity checker** to verify your snapshot database is healthy
-- A **QA test suite** that runs a live end-to-end recovery test against your real backend
+- A **self-test** that checks every setting against real files in a temporary folder
 
 ---
 
@@ -262,6 +274,8 @@ __pycache__/
 .DS_Store
 ```
 
+You rarely need to write rules by hand: the tree you see when adding a folder, and later in its settings under **What to watch**, writes them for you as you untick folders and files.
+
 Rules are per-folder and editable at any time through the settings UI. The app ships with sensible defaults so you don't have to think about it for common project types.
 
 A rule ending in `/` skips that folder and everything inside it. Without another `/` it matches at any depth (`Cache/` skips every folder named `Cache`); with one it is relative to the watched folder (`SomeApp/cache/`).
@@ -272,62 +286,62 @@ ZFileTimeMachine's own data folder is always skipped, so you can safely watch a 
 
 ### Per-File Overrides
 
-For files you never want auto-snapshotted (build artifacts, lock files, frequently-regenerated outputs), click the **pause icon** next to any file to switch it to **Manual only** mode. The file stays tracked in the database but snapshots only happen when you explicitly ask.
+For files you never want auto-snapshotted (build artifacts, lock files, frequently-regenerated outputs), use the **pause button** in the file's header or right-click it in the file tree to switch it to **Manual only** mode. The file stays tracked in the database but snapshots only happen when you explicitly ask.
 
-You can do the same for a whole subfolder from its settings icon or right-click menu. Files added to a paused subfolder later are paused as well: they appear in the list without a snapshot, and you can still snapshot them by hand.
+You can do the same for a whole subfolder by right-clicking it in the file tree. Files added to a paused subfolder later are paused as well: they appear in the list without a snapshot, and you can still snapshot them by hand.
 
 ---
 
 ## The Interface
 
-### Main Dashboard
+### Sidebar
 
-The opening screen shows all your watched folders as cards. Each card displays:
-- Watching or paused status (a dot on the folder icon, plus a "Paused" label when paused)
-- The folder path, how snapshots are triggered, and how many are kept
-- When the folder was added
-- On hover: quick access to recovery, settings, pause/resume, and removal (also available by right-clicking)
+Every watched folder is listed in the sidebar, with a dot while it's being watched and a pause sign when it isn't. Below them sit the storage meter, Settings and About. Collapse the sidebar with `Ctrl B` (`⌘ B`); it also narrows by itself in small windows. Drop a folder anywhere on the window to start watching it.
 
-### Title Bar & Search
+### Overview
 
-The title bar holds the app name, a search box, and the window controls. Click the search box or press `Ctrl K` (`⌘ K` on macOS) to jump to any folder or screen. On Windows and Linux the app draws its own minimize, maximize, and close buttons; on macOS it keeps the native traffic lights.
+All watched folders as cards: how many versions and files each one has, two weeks of activity, how it saves and how long it keeps versions. Below them, the most recent changes across all folders, each one a click away from its file's history.
 
-### Folder Detail
+### Search
+
+Press `Ctrl K` (`⌘ K` on macOS) or click **Search** in the sidebar to find any file in any watched folder, jump to a folder or screen, or run an action like switching the theme.
+
+### Folder
 
 The main work area for a folder:
-- Searchable, filterable list of all tracked files
-- Snapshot count and last snapshot time per file
-- Click any file to expand its full snapshot timeline with diffs
-- Activity feed showing recent snapshot events, renames, and deletions
-- Notes search across the entire folder with jump-to-file
+- A file tree you can filter, fold, and move through with the arrow keys
+- The selected file's history, with the comparison beside it and a button to restore
+- **Activity**: everything that happened in the folder, by day
+- **Notes**: search the notes on files and versions, and jump to the match
 
-### Folder Recovery
+### Recover
 
 The bulk recovery screen:
-- File tree with checkboxes — select individual files or entire directories at once
-- Snapshot point selector (latest / Nth from latest / as-of date with time)
-- Export or Restore mode toggle
-- Ignore patterns input
-- Dry-run preview before committing to any changes
-- Progress bar during recovery with per-file status
+- File tree with checkboxes: select individual files or entire directories at once
+- Where the files go: copy them to another folder, or replace them in place
+- Which version: the newest, a number of saves back, or the version at a point in time
+- Pin a specific version for any single file
+- Paths to skip
+- A preview of exactly what would be recovered before anything is written, and progress while it runs
 
 ### Folder Settings
 
-Per-folder configuration:
-- Backup trigger mode (OnChange / Interval / Manual / Hybrid)
-- Retention rule (KeepLast / TimeBased / Hybrid)
-- Ignore patterns editor
-- Binary file size and count limits
-- Compression toggle
-- Minimum snapshot interval
+Per folder:
+- Name, icon and color, or a preset for code, writing or media
+- When versions are saved, how long to wait after a save, and how often one file can get a new version
+- How long versions are kept (a number, a number of days, or both)
+- Binary file size limit, compression, and how deep into subfolders to watch
+- What to watch: the folder as a tree to tick and untick, and the full list of rules
+- Space used per file
 
-### Global Settings
+### Settings
 
-App-wide options:
-- Global storage cap (optional hard limit on total CAS size)
-- Log level
-- Theme (dark/light)
-- Integrity check and garbage collection
+App-wide:
+- Appearance: dark, light or like your system, seven themes, accent color, folder icon colors, corner roundness, and whether comparisons always show the whole file
+- What closing the window does (keep running in the tray, or quit), and starting with your computer
+- An optional limit on the total space for history, with deduplication stats
+- Free unused space, remove empty file entries, and check the history for damage
+- The self-test
 
 ---
 
@@ -338,24 +352,25 @@ ZFileTimeMachine/
 ├── src/                          # React + TypeScript frontend
 │   ├── assets/logo.png
 │   ├── components/
-│   │   ├── TitleBar.tsx          # Custom title bar, search, window controls
-│   │   ├── FolderCard.tsx  FolderBrowser.tsx  FileList.tsx
-│   │   ├── Timeline.tsx  DiffViewer.tsx  RewindDialog.tsx
+│   │   ├── shell/                # Sidebar and window controls
+│   │   ├── ui/                   # Buttons, sheets, popovers, segmented controls, tooltips
+│   │   ├── reactbits/            # Text animation from React Bits
+│   │   ├── FileTree.tsx  HistoryPane.tsx  DiffViewer.tsx  FolderCard.tsx
 │   │   ├── RecoverTree.tsx  RecoverConfirmDialog.tsx  ConfirmDialog.tsx
 │   │   ├── CommandPalette.tsx  ContextMenu.tsx  KeyboardShortcuts.tsx
 │   │   ├── ActivityFeed.tsx  NoteEditor.tsx  IgnoreRulesEditor.tsx
 │   │   ├── AddFolderDialog.tsx  OnboardingModal.tsx  DevPanel.tsx
 │   │   └── …                     # small UI pieces (tooltips, checkboxes, pickers)
-│   ├── context/                  # Toasts, onboarding
+│   ├── context/                  # Toasts, onboarding, adding folders
 │   ├── hooks/                    # React Query hooks and live backend events
-│   ├── lib/                      # Tauri command bindings, types, event helpers
-│   ├── routes/                   # Folders, FolderDetail, FolderRecover, Settings, About
+│   ├── lib/                      # Tauri command bindings, types, events, motion, platform helpers
+│   ├── routes/                   # Overview, FolderDetail, FolderRecover, Settings, About
 │   ├── App.tsx  main.tsx  index.css
 ├── src-tauri/                    # Rust backend
 │   ├── capabilities/default.json # Permissions granted to the window
 │   ├── icons/
 │   ├── src/
-│   │   ├── commands/             # Tauri commands: folders, snapshots, rewind, recover, settings, notes, dev
+│   │   ├── commands/             # Tauri commands: folders, snapshots, rewind, recover, settings, notes, appearance, browse, dev
 │   │   ├── db/                   # SQLite schema, migrations, queries
 │   │   ├── snapshot/             # Hashing, binary detection, retention
 │   │   ├── store/cas.rs          # Content-addressed blob store
@@ -364,7 +379,8 @@ ZFileTimeMachine/
 │   │   ├── rename.rs  diff.rs  events.rs  config.rs  error.rs
 │   │   └── lib.rs  main.rs
 │   ├── tauri.conf.json           # App and window config (all platforms)
-│   ├── tauri.macos.conf.json     # macOS overrides (native traffic lights)
+│   ├── tauri.macos.conf.json     # macOS overrides (native traffic lights, translucent window)
+│   ├── tauri.windows.conf.json   # Windows overrides (transparent window for Mica)
 │   └── Cargo.toml
 ├── docs/                         # README screenshots
 ├── CHANGELOG.md
@@ -380,8 +396,8 @@ ZFileTimeMachine/
 | Platform | Status | Notes |
 |---|---|---|
 | **Linux** | Supported | Primary development platform. File watching via inotify. |
-| **Windows** | Supported | Windows 10 and 11. On Windows 11 the window has rounded corners and a native shadow. File watching via ReadDirectoryChangesW. |
-| **macOS** | Builds, not fully tested | Apple Silicon and Intel builds are produced. The app shows a notice on first launch; please [report issues](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues). File watching via FSEvents. |
+| **Windows** | Supported | Windows 10 and 11. On Windows 11 the window has rounded corners and the Mica material behind the sidebar. File watching via ReadDirectoryChangesW. |
+| **macOS** | Builds, not fully tested | Apple Silicon and Intel builds are produced. The sidebar uses the native translucent material. The app shows a notice on first launch; please [report issues](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues). File watching via FSEvents. |
 
 ---
 
@@ -444,10 +460,22 @@ pnpm check
 
 ---
 
-## Keyboard Shortcuts (Still in work) 
+## Keyboard Shortcuts
 
 | Shortcut | Action |
 |---|---|
+| `Ctrl / Cmd + K` | Search files, folders and actions |
+| `Ctrl / Cmd + B` | Show or hide the sidebar |
+| `↑` `↓` | Move through files and versions |
+| `Enter` | Restore the selected version |
+| `Ctrl / Cmd + F` | Find in a comparison |
+| `Ctrl / Cmd + Enter` | Save a note |
+| `Ctrl / Cmd + S` | Save changed settings |
+| `Ctrl / Cmd + A` | Select every file on the Recover screen |
+| `Escape` | Close a dialog or menu |
+| `?` | Show the shortcut list |
+
+---|---|
 | `Ctrl / Cmd + K` | Open command palette |
 | `?` | Show keyboard shortcuts reference |
 | `Escape` | Close modal / clear selection |
@@ -468,6 +496,8 @@ pnpm check
 - Vite 5 (build tool and dev server)
 - Tailwind CSS 3 (utility-first styling)
 - React Query 5 / TanStack Query (server state, caching, background refetch)
+- TanStack Virtual (smooth file trees with thousands of files)
+- GSAP (motion: easing, sliding highlights, the restore animation) and React Bits text effects
 - Lucide React (icon library)
 - date-fns (date formatting)
 - Geist and Geist Mono (bundled typefaces, no network needed)

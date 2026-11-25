@@ -1,260 +1,274 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Binary, Maximize2, Search, X, ChevronUp, ChevronDown, AlertCircle, Diff } from 'lucide-react';
-import type { DiffResult } from '@/lib/types';
+import { Binary, Search, X, ChevronUp, ChevronDown, FileWarning, Equal, ChevronsUpDown } from 'lucide-react';
+import type { DiffLine, DiffResult } from '@/lib/types';
 
 interface Props {
   diff: DiffResult;
   maxLines?: number;
   sizeBefore?: number;
   sizeAfter?: number;
+  fill?: boolean;
+  context?: number;
+  findShortcut?: boolean;
+  emptyLabel?: string;
+  whole?: boolean;
 }
 
 function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function fmtSize(n: number): string {
-  if (n < 1024) return `${n}B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
-  return `${(n / 1024 / 1024).toFixed(2)}MB`;
+export function fmtSize(n: number): string {
+  const abs = Math.abs(n);
+  if (abs < 1024) return `${n} B`;
+  if (abs < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
-export function DiffViewer({ diff, maxLines = 400, sizeBefore, sizeAfter }: Props) {
-  const [findOpen, setFindOpen]   = useState(false);
-  const [query, setQuery]         = useState('');
-  const [useRegex, setUseRegex]   = useState(false);
-  const [matchIdx, setMatchIdx]   = useState(0);
-  const [regexError, setRegexError] = useState(false);
-  const inputRef  = useRef<HTMLInputElement>(null);
-  const rowRefs   = useRef<Map<number, HTMLTableRowElement>>(new Map());
+type Row = { type: 'line'; line: DiffLine; index: number } | { type: 'fold'; start: number; end: number };
+
+function buildRows(lines: DiffLine[], context: number, expanded: Set<number>): Row[] {
+  const changed = lines.map((l) => l.kind !== 'equal');
+  if (!changed.some(Boolean)) return lines.map((line, index) => ({ type: 'line', line, index }));
+  const keep = new Array(lines.length).fill(false);
+  changed.forEach((c, i) => {
+    if (!c) return;
+    for (let j = Math.max(0, i - context); j <= Math.min(lines.length - 1, i + context); j++) keep[j] = true;
+  });
+  const rows: Row[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (keep[i]) { rows.push({ type: 'line', line: lines[i], index: i }); i++; continue; }
+    let j = i;
+    while (j < lines.length && !keep[j]) j++;
+    if (expanded.has(i) || j - i < 4) {
+      for (let k = i; k < j; k++) rows.push({ type: 'line', line: lines[k], index: k });
+    } else {
+      rows.push({ type: 'fold', start: i, end: j });
+    }
+    i = j;
+  }
+  return rows;
+}
+
+export function DiffViewer({ diff, maxLines = 5000, sizeBefore, sizeAfter, fill, context = 3, findShortcut = true, emptyLabel, whole = false }: Props) {
+  const [findOpen, setFindOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [useRegex, setUseRegex] = useState(false);
+  const [matchIdx, setMatchIdx] = useState(0);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [showAll, setShowAll] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
+
+  useEffect(() => { setExpanded(new Set()); setShowAll(false); }, [diff]);
 
   useEffect(() => {
+    if (!findShortcut) return;
     function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setFindOpen(true);
-        setTimeout(() => inputRef.current?.focus(), 50);
+        setTimeout(() => inputRef.current?.focus(), 30);
       }
-      if (e.key === 'Escape') { setFindOpen(false); setQuery(''); }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, []);
+  }, [findShortcut]);
 
-  useEffect(() => {
-    if (findOpen) setTimeout(() => inputRef.current?.focus(), 30);
-  }, [findOpen]);
-
-  const re = useMemo(() => {
-    if (!query) { setRegexError(false); return null; }
+  const { re, regexError } = useMemo(() => {
+    if (!query) return { re: null, regexError: false };
     try {
-      const r = new RegExp(useRegex ? query : escapeRegex(query), 'gi');
-      setRegexError(false);
-      return r;
+      return { re: new RegExp(useRegex ? query : escapeRegex(query), 'gi'), regexError: false };
     } catch {
-      setRegexError(true);
-      return null;
+      return { re: null, regexError: true };
     }
   }, [query, useRegex]);
 
+  const lines = useMemo(() => diff.lines.slice(0, maxLines), [diff.lines, maxLines]);
+  const rows = useMemo(
+    () => (showAll || whole || re ? lines.map((line, index) => ({ type: 'line' as const, line, index })) : buildRows(lines, context, expanded)),
+    [lines, context, expanded, showAll, whole, re],
+  );
+
   const matchingLines = useMemo(() => {
     if (!re) return [];
-    return diff.lines
-      .slice(0, maxLines)
-      .map((l, i) => (re.test(l.content) ? i : -1))
-      .filter((i) => i !== -1);
-  }, [re, diff.lines, maxLines]);
+    return lines.map((l, i) => { re.lastIndex = 0; return re.test(l.content) ? i : -1; }).filter((i) => i !== -1);
+  }, [re, lines]);
 
   const clampedIdx = matchingLines.length > 0 ? matchIdx % matchingLines.length : 0;
 
   const scrollToMatch = useCallback((idx: number) => {
     const lineIdx = matchingLines[idx];
     if (lineIdx == null) return;
-    rowRefs.current.get(lineIdx)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    rowRefs.current.get(lineIdx)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [matchingLines]);
-
-  function nextMatch() {
-    const next = (clampedIdx + 1) % matchingLines.length;
-    setMatchIdx(next);
-    scrollToMatch(next);
-  }
-  function prevMatch() {
-    const prev = (clampedIdx - 1 + matchingLines.length) % matchingLines.length;
-    setMatchIdx(prev);
-    scrollToMatch(prev);
-  }
 
   useEffect(() => { setMatchIdx(0); scrollToMatch(0); }, [query, useRegex, scrollToMatch]);
 
+  function step(dir: 1 | -1) {
+    if (!matchingLines.length) return;
+    const next = (clampedIdx + dir + matchingLines.length) % matchingLines.length;
+    setMatchIdx(next);
+    scrollToMatch(next);
+  }
+
   function highlight(content: string) {
-    if (!re || !query) return <>{content}</>;
+    if (!re || !query) return content;
     re.lastIndex = 0;
     const parts: React.ReactNode[] = [];
     let last = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(content)) !== null) {
       if (m.index > last) parts.push(content.slice(last, m.index));
-      parts.push(
-        <mark key={m.index} className="bg-yellow-400/40 text-yellow-200 rounded-sm">{m[0]}</mark>,
-      );
+      parts.push(<mark key={m.index} className="bg-caution/30 text-foreground rounded-[calc(3px*var(--rs))] px-px">{m[0]}</mark>);
       last = m.index + m[0].length;
       if (m[0].length === 0) { re.lastIndex++; break; }
     }
     if (last < content.length) parts.push(content.slice(last));
-    return <>{parts}</>;
+    return parts;
   }
+
+  const shell = `rounded-lg bg-surface-sunken shadow-[inset_0_0_0_1px_hsl(var(--line))] ${fill ? 'h-full' : ''}`;
 
   if (diff.is_binary) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground/60">
-        <Binary size={13} className="shrink-0" />
-        <span>Binary file</span>
+      <div className={`${shell} flex flex-col items-center justify-center gap-2 px-6 py-10 text-center`}>
+        <Binary size={22} className="text-faint" />
+        <p className="text-sm text-muted-foreground">This file isn't text, so there's no line-by-line comparison.</p>
         {sizeBefore != null && sizeAfter != null && (
-          <span className="font-mono">
-            {fmtSize(sizeBefore)} → {fmtSize(sizeAfter)}
-            <span className={sizeAfter > sizeBefore ? 'text-emerald-400' : sizeAfter < sizeBefore ? 'text-red-400' : ''}>
-              {' '}({sizeAfter > sizeBefore ? '+' : ''}{fmtSize(sizeAfter - sizeBefore)})
-            </span>
-          </span>
+          <p className="text-xs text-faint tabular-nums">
+            {fmtSize(sizeBefore)} now, {fmtSize(sizeAfter)} in this version
+          </p>
         )}
       </div>
     );
   }
   if (diff.too_large) {
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground italic p-3 rounded-xl
-                      bg-secondary/30 border border-border/50">
-        <Maximize2 size={13} />File too large to diff inline
+      <div className={`${shell} flex flex-col items-center justify-center gap-2 px-6 py-10 text-center`}>
+        <FileWarning size={22} className="text-faint" />
+        <p className="text-sm text-muted-foreground">This file is too large to compare here (over 512 KB). You can still restore it.</p>
       </div>
     );
   }
-  if (diff.lines.length === 0) {
+  const allEqual = diff.lines.every((l) => l.kind === 'equal');
+  if (diff.lines.length === 0 || (allEqual && !whole)) {
     return (
-      <p className="text-xs text-muted-foreground italic p-3 rounded-xl bg-secondary/30 border border-border/50">
-        No changes between this snapshot and current
-      </p>
+      <div className={`${shell} flex flex-col items-center justify-center gap-2 px-6 py-10 text-center`}>
+        <Equal size={22} className="text-faint" />
+        <p className="text-sm text-muted-foreground">{emptyLabel ?? 'This version is the same as the file on disk.'}</p>
+      </div>
     );
   }
 
-  const added   = diff.lines.filter((l) => l.kind === 'insert').length;
+  const added = diff.lines.filter((l) => l.kind === 'insert').length;
   const removed = diff.lines.filter((l) => l.kind === 'delete').length;
-  const lines   = diff.lines.slice(0, maxLines);
+  const hasFolds = rows.some((r) => r.type === 'fold');
 
   return (
-    <div className="rounded-xl border border-border/60 overflow-hidden bg-popover backdrop-blur-sm
-                    shadow-[0_4px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.03)]">
-
-
-      <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-border/50 bg-secondary/30">
-        <Diff size={12} className="text-muted-foreground/50 shrink-0" />
-        {added   > 0 && <span className="text-emerald-400 font-mono text-xs font-semibold">+{added}</span>}
-        {removed > 0 && <span className="text-red-400 font-mono text-xs font-semibold">−{removed}</span>}
-        {added === 0 && removed === 0 && (
-          <span className="text-muted-foreground/70 font-mono text-xs">±0</span>
+    <div className={`${shell} flex flex-col overflow-hidden`}>
+      <div className="flex items-center gap-3 h-9 px-3 shrink-0 border-b border-[hsl(var(--line))]">
+        {allEqual ? (
+          <span className="text-xs text-muted-foreground">{emptyLabel ?? 'Same as the file on disk'}</span>
+        ) : (
+          <>
+            <span className="text-xs font-medium tabular-nums text-positive">+{added}</span>
+            <span className="text-xs font-medium tabular-nums text-negative">−{removed}</span>
+            <span className="text-2xs text-faint">lines</span>
+          </>
         )}
-
         <div className="flex-1" />
-
-
+        {hasFolds && !findOpen && (
+          <button onClick={() => setShowAll(true)} className="press inline-flex items-center gap-1 h-6 px-2 rounded-[calc(6px*var(--rs))] text-2xs text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]">
+            <ChevronsUpDown size={11} />Show whole file
+          </button>
+        )}
         {!findOpen ? (
           <button
             onClick={() => setFindOpen(true)}
-            className="flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-foreground
-                       transition-colors px-1.5 py-0.5 rounded hover:bg-secondary"
-            title="Find (Ctrl+F)"
+            className="press inline-flex items-center gap-1 h-6 px-2 rounded-[calc(6px*var(--rs))] text-2xs text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]"
+            data-tip="Find in this comparison"
           >
             <Search size={11} />Find
           </button>
         ) : (
-          <div className="flex items-center gap-1.5 animate-fade-in">
-            <div className={`flex items-center gap-1.5 bg-secondary/60 border rounded-lg px-2 py-1 ${
-              regexError ? 'border-red-500/50' : 'border-border/60'
-            }`}>
-              {regexError && <AlertCircle size={11} className="text-red-400 shrink-0" />}
+          <div className="flex items-center gap-1 animate-fade-in">
+            <div className={`flex items-center gap-1.5 h-6 rounded-[calc(6px*var(--rs))] pl-2 pr-1 bg-surface shadow-[inset_0_0_0_1px_hsl(var(--line))] ${regexError ? 'shadow-[inset_0_0_0_1px_hsl(var(--negative)/0.6)]' : ''}`}>
               <input
                 ref={inputRef}
+                autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.shiftKey ? prevMatch() : nextMatch();
+                  if (e.key === 'Enter') step(e.shiftKey ? -1 : 1);
+                  if (e.key === 'Escape') { e.stopPropagation(); setFindOpen(false); setQuery(''); }
                 }}
-                placeholder="Find in diff…"
-                className="bg-transparent text-xs w-40 focus:outline-none placeholder:text-muted-foreground/60"
+                placeholder="Find"
+                className="bg-transparent text-xs w-32 outline-none placeholder:text-faint"
               />
               <button
                 onClick={() => setUseRegex((v) => !v)}
-                className={`text-[10px] font-mono px-1 py-px rounded transition-colors ${
-                  useRegex ? 'bg-primary/20 text-primary' : 'text-muted-foreground/50 hover:text-foreground'
-                }`}
-                title="Toggle regex"
+                className={`text-2xs font-mono px-1 rounded-[calc(4px*var(--rs))] ${useRegex ? 'bg-primary/20 text-primary' : 'text-faint hover:text-foreground'}`}
+                data-tip="Regular expression"
               >.*</button>
             </div>
-            {matchingLines.length > 0 && (
-              <span className="text-[10px] text-muted-foreground/50 tabular-nums whitespace-nowrap">
-                {clampedIdx + 1}/{matchingLines.length}
-              </span>
-            )}
-            {query && matchingLines.length === 0 && !regexError && (
-              <span className="text-[10px] text-muted-foreground/70">no matches</span>
-            )}
-            <button onClick={prevMatch} disabled={matchingLines.length === 0}
-              className="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-30 transition-colors">
-              <ChevronUp size={13} />
-            </button>
-            <button onClick={nextMatch} disabled={matchingLines.length === 0}
-              className="p-0.5 text-muted-foreground/50 hover:text-foreground disabled:opacity-30 transition-colors">
-              <ChevronDown size={13} />
-            </button>
-            <button onClick={() => { setFindOpen(false); setQuery(''); }}
-              className="p-0.5 text-muted-foreground/50 hover:text-foreground transition-colors">
-              <X size={12} />
-            </button>
+            <span className="text-2xs text-faint tabular-nums w-10 text-center">
+              {query ? (matchingLines.length ? `${clampedIdx + 1}/${matchingLines.length}` : '0') : ''}
+            </span>
+            <button onClick={() => step(-1)} disabled={!matchingLines.length} className="w-6 h-6 grid place-items-center rounded-[calc(6px*var(--rs))] text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Previous match"><ChevronUp size={13} /></button>
+            <button onClick={() => step(1)} disabled={!matchingLines.length} className="w-6 h-6 grid place-items-center rounded-[calc(6px*var(--rs))] text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Next match"><ChevronDown size={13} /></button>
+            <button onClick={() => { setFindOpen(false); setQuery(''); }} className="w-6 h-6 grid place-items-center rounded-[calc(6px*var(--rs))] text-muted-foreground hover:text-foreground" aria-label="Close find"><X size={12} /></button>
           </div>
         )}
       </div>
 
-
-      <div className="max-h-72 overflow-y-auto overflow-x-hidden">
-        <div className="overflow-x-auto pb-2">
-          <table className="font-mono text-xs border-collapse min-w-full">
-            <tbody>
-              {lines.map((line, i) => {
-                const isMatch  = re && matchingLines.includes(i);
-                const isActive = isMatch && matchingLines[clampedIdx] === i;
-                const isIns = line.kind === 'insert';
-                const isDel = line.kind === 'delete';
-                const bg =
-                  isActive  ? 'bg-yellow-500/20'
-                  : isIns   ? 'bg-emerald-950/40'
-                  : isDel   ? 'bg-red-950/40'
-                  : '';
-                const fg = isIns ? 'text-emerald-300' : isDel ? 'text-red-300' : 'text-muted-foreground';
-                const prefix = isIns ? '+' : isDel ? '−' : ' ';
-                const lineNum = line.new_lineno ?? line.old_lineno ?? '';
+      <div className={`overflow-auto selectable ${fill ? 'flex-1 min-h-0' : 'max-h-80'}`}>
+        <table className="font-mono text-[12px] leading-[20px] border-collapse min-w-full">
+          <tbody>
+            {rows.map((row) => {
+              if (row.type === 'fold') {
                 return (
-                  <tr
-                    key={i}
-                    ref={(el) => { if (el) rowRefs.current.set(i, el); else rowRefs.current.delete(i); }}
-                    className={`leading-5 ${bg} ${isMatch && !isActive ? 'outline outline-1 outline-yellow-500/20' : ''}`}
-                  >
-                    <td className="pl-3 pr-3 select-none text-muted-foreground/50 w-10 text-right tabular-nums">
-                      {lineNum}
+                  <tr key={`fold-${row.start}`}>
+                    <td colSpan={4} className="p-0">
+                      <button
+                        onClick={() => setExpanded((s) => new Set(s).add(row.start))}
+                        className="w-full h-7 flex items-center gap-2 px-3 text-2xs font-sans text-faint hover:text-foreground bg-foreground/[0.025] hover:bg-foreground/[0.05]
+                                   border-y border-[hsl(var(--line))]"
+                      >
+                        <ChevronsUpDown size={11} />
+                        {row.end - row.start} unchanged lines
+                      </button>
                     </td>
-                    <td className={`px-1 select-none w-4 font-bold opacity-55 ${fg}`}>{prefix}</td>
-                    <td className={`pr-6 whitespace-pre ${fg}`}>{highlight(line.content)}</td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              }
+              const { line, index } = row;
+              const isMatch = re != null && matchingLines.includes(index);
+              const isActive = isMatch && matchingLines[clampedIdx] === index;
+              const isIns = line.kind === 'insert';
+              const isDel = line.kind === 'delete';
+              const bg = isActive ? 'bg-caution/20' : isIns ? 'bg-positive/[0.09]' : isDel ? 'bg-negative/[0.09]' : '';
+              const bar = isIns ? 'shadow-[inset_2px_0_0_hsl(var(--positive))]' : isDel ? 'shadow-[inset_2px_0_0_hsl(var(--negative))]' : '';
+              return (
+                <tr
+                  key={index}
+                  ref={(el) => { if (el) rowRefs.current.set(index, el); else rowRefs.current.delete(index); }}
+                  className={bg}
+                >
+                  <td className={`select-none w-11 pl-3 pr-1.5 text-right tabular-nums text-faint/70 ${bar}`}>{line.old_lineno ?? ''}</td>
+                  <td className="select-none w-9 pr-2 text-right tabular-nums text-faint/70">{line.new_lineno ?? ''}</td>
+                  <td className={`select-none w-4 text-center ${isIns ? 'text-positive' : isDel ? 'text-negative' : 'text-transparent'}`}>{isIns ? '+' : isDel ? '−' : ' '}</td>
+                  <td className={`pr-6 whitespace-pre ${isIns || isDel ? 'text-foreground' : 'text-muted-foreground'}`}>{highlight(line.content.replace(/\n$/, ''))}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {diff.lines.length > maxLines && (
+          <p className="text-2xs text-faint px-4 py-2 font-sans">{(diff.lines.length - maxLines).toLocaleString()} more lines not shown.</p>
+        )}
       </div>
-
-      {diff.lines.length > maxLines && (
-        <p className="text-xs text-muted-foreground/70 px-4 py-1.5 border-t border-border/50 bg-secondary/20">
-          +{diff.lines.length - maxLines} more lines
-        </p>
-      )}
     </div>
   );
 }

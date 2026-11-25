@@ -1,56 +1,95 @@
-import { createPortal } from 'react-dom';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  ArrowLeft, Search, X, FolderDown, RotateCcw, Loader2,
-  CheckCircle2, XCircle, ChevronDown, Eye, FolderOpen,
-  AlertCircle, Pin, PinOff, Clock, AlertTriangle, FileText,
-  History, Layers, Info,
+  ArrowLeft, Search, X, FolderDown, RotateCcw, CheckCircle2, XCircle, ChevronDown, Eye, FolderOpen,
+  Pin, PinOff, TriangleAlert, Camera, Clock, Undo2, Sparkles, MousePointerClick, Info,
 } from 'lucide-react';
-import type { SnapshotPreference } from '@/lib/types';
+import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
-import { listFiles, listSnapshots, bulkRecover, pickFolder } from '@/lib/tauri';
+import { listFiles, listSnapshots, bulkRecover, pickFolder, formatPath } from '@/lib/tauri';
 import type {
   BulkRecoverArgs, BulkRecoverResult, RecoverProgressPayload,
-  FileEntry, Snapshot, SnapshotPoint, ConflictPolicy,
+  FileEntry, Snapshot, SnapshotPoint, ConflictPolicy, SnapshotPreference,
 } from '@/lib/types';
 import { useFolders } from '@/hooks/useFolders';
 import { RecoverTree } from '@/components/RecoverTree';
 import { RecoverConfirmDialog } from '@/components/RecoverConfirmDialog';
 import { DateTimePicker } from '@/components/DateTimePicker';
 import { useToast } from '@/context/ToastContext';
+import { Segmented } from '@/components/ui/Segmented';
+import { Switch } from '@/components/ui/Switch';
+import { Button, IconButton } from '@/components/ui/Button';
+import { Sheet, SheetHeader } from '@/components/ui/Sheet';
+import { FileIcon } from '@/components/ui/FileIcon';
+import { CopyPath } from '@/components/ui/CopyPath';
+import { Spinner } from '@/components/ui/Spinner';
+import { gsap, dur } from '@/lib/motion';
 
 const DEFAULT_IGNORE_PATTERNS = [
   'node_modules/', 'target/', '.git/', 'dist/', 'build/',
   '.next/', '.venv/', '__pycache__/', '.DS_Store',
 ].join('\n');
 
-function fmt(ts: number | null, style: 'short' | 'medium' = 'short') {
-  if (!ts) return '–';
-  return new Date(ts).toLocaleString(undefined, {
-    dateStyle: style, timeStyle: style,
-  });
+function fmt(ts: number | null) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return format(d, d.getFullYear() === new Date().getFullYear() ? "MMM d, HH:mm" : 'MMM d yyyy, HH:mm');
 }
 function fmtBytes(b: number) {
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
+function plural(n: number, word: string) {
+  return `${n.toLocaleString()} ${word}${n !== 1 ? 's' : ''}`;
+}
 
-const SOURCE_LABEL: Record<string, string> = {
-  change: 'OnChange', interval: 'Interval', manual: 'Manual', 'pre-rewind': 'Pre-rewind',
+const SOURCE: Record<string, { label: string; Icon: typeof Camera | null }> = {
+  change: { label: 'Saved', Icon: null },
+  manual: { label: 'Saved by hand', Icon: Camera },
+  interval: { label: 'Saved on schedule', Icon: Clock },
+  'pre-rewind': { label: 'Kept before a restore', Icon: Undo2 },
+  initial: { label: 'First version', Icon: Sparkles },
 };
-const SOURCE_COLOR: Record<string, string> = {
-  change:       'text-emerald-400 bg-emerald-400/10 border-emerald-400/25',
-  interval:     'text-sky-400    bg-sky-400/10     border-sky-400/25',
-  manual:       'text-violet-400 bg-violet-400/10  border-violet-400/25',
-  'pre-rewind': 'text-amber-400  bg-amber-400/10   border-amber-400/25',
-};
-
 
 type SrcFilter = 'all' | 'change' | 'manual' | 'pre-rewind';
+type Tolerance = 'none' | '1h' | '6h' | '1d';
+const TOLERANCE_MS: Record<Tolerance, number | null> = { none: null, '1h': 3_600_000, '6h': 21_600_000, '1d': 86_400_000 };
+
+function Section({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section data-section>
+      <div className="flex items-baseline justify-between mb-2.5">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Notice({ tone = 'neutral', icon, children }: { tone?: 'neutral' | 'caution'; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className={`flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-xs leading-relaxed
+                     ${tone === 'caution' ? 'bg-caution/[0.08] shadow-[inset_0_0_0_1px_hsl(var(--caution)/0.22)] text-foreground/85' : 'bg-foreground/[0.035] shadow-[inset_0_0_0_1px_hsl(var(--line))] text-muted-foreground'}`}>
+      <span className={`shrink-0 mt-px ${tone === 'caution' ? 'text-caution' : 'text-faint'}`}>{icon ?? <Info size={13} />}</span>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function CoverageRow({ tone, children }: { tone: 'pos' | 'caution' | 'neg'; children: React.ReactNode }) {
+  const Icon = tone === 'pos' ? CheckCircle2 : tone === 'caution' ? TriangleAlert : XCircle;
+  const cls = tone === 'pos' ? 'text-positive' : tone === 'caution' ? 'text-caution' : 'text-negative';
+  return (
+    <div className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
+      <Icon size={12} className={`${cls} shrink-0 mt-[3px]`} />
+      <span>{children}</span>
+    </div>
+  );
+}
 
 function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
   file: FileEntry;
@@ -60,129 +99,96 @@ function FileSnapshotPanel({ file, pinnedId, onPin, onUnpin, onClose }: {
   onClose: () => void;
 }) {
   const [src, setSrc] = useState<SrcFilter>('all');
+  const listRef = useRef<HTMLDivElement>(null);
   const { data: snaps = [], isLoading } = useQuery<Snapshot[]>({
     queryKey: ['snapshots', file.id],
     queryFn: () => listSnapshots(file.id),
   });
-  const list = useMemo(
-    () => src === 'all' ? snaps : snaps.filter((s) => s.source === src),
-    [snaps, src],
-  );
+  const list = useMemo(() => (src === 'all' ? snaps : snaps.filter((s) => s.source === src)), [snaps, src]);
   const pinned = snaps.find((s) => s.id === pinnedId);
+  const name = file.relPath.split('/').pop();
+
+  useLayoutEffect(() => {
+    if (!listRef.current || isLoading) return;
+    gsap.fromTo(listRef.current.children, { autoAlpha: 0, y: 4 }, { autoAlpha: 1, y: 0, duration: dur(0.35), stagger: 0.015, ease: 'zftm', clearProps: 'transform' });
+  }, [file.id, src, isLoading]);
 
   return (
     <div className="flex flex-col h-full">
-
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-foreground/6 shrink-0">
-        <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-          <FileText size={13} className="text-primary/70" />
+      <div className="flex items-center gap-3 px-5 pt-4 pb-3 shrink-0">
+        <div className="w-9 h-9 rounded-[calc(10px*var(--rs))] bg-foreground/[0.055] shadow-[inset_0_0_0_1px_hsl(var(--line))] grid place-items-center shrink-0">
+          <FileIcon path={file.relPath} binary={file.isBinary} size={16} className="text-foreground/75" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-foreground/90 truncate font-mono">
-            {file.relPath.split('/').pop()}
-          </p>
-          <p className="text-[10px] text-muted-foreground/70 font-mono truncate">
-            {file.relPath}
-          </p>
+          <p className="text-md font-semibold truncate">{name}</p>
+          <p className="text-xs text-faint font-mono truncate">{file.relPath}</p>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-foreground/6 text-muted-foreground/70 hover:text-foreground transition-all"
-        >
-          <X size={13} />
-        </button>
+        <IconButton label="Back to the options" onClick={onClose}><X size={15} /></IconButton>
       </div>
 
-
-      {pinned && (
-        <div className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-400/8 border border-amber-400/20">
-          <Pin size={10} className="text-amber-400 shrink-0 fill-amber-400/40" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-amber-300/90 font-medium truncate">Pinned snapshot</p>
-            <p className="text-[10px] text-amber-400/50 font-mono">{fmt(pinned.createdAt, 'medium')}</p>
+      <div className="px-5 pb-3 shrink-0">
+        {pinned ? (
+          <div className="flex items-center gap-3 px-3.5 h-11 rounded-lg bg-primary/[0.09] shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.25)]">
+            <Pin size={13} className="text-primary shrink-0" />
+            <p className="flex-1 min-w-0 text-sm truncate">
+              Uses the version from <span className="font-medium tabular-nums">{fmt(pinned.createdAt)}</span>
+            </p>
+            <button onClick={onUnpin} className="press inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/[0.07]">
+              <PinOff size={12} />Unpin
+            </button>
           </div>
-          <button onClick={onUnpin} className="p-1 rounded-lg hover:bg-amber-400/15 text-amber-400/50 hover:text-amber-400 transition-all" title="Remove pin">
-            <PinOff size={11} />
-          </button>
-        </div>
-      )}
-
-
-      <div className="flex items-center gap-1 px-3 pt-3 pb-0 shrink-0">
-        {(['all', 'change', 'manual', 'pre-rewind'] as SrcFilter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setSrc(f)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-medium border transition-all
-                        ${src === f
-                          ? 'bg-primary/15 border-primary/30 text-primary'
-                          : 'border-transparent text-muted-foreground/70 hover:text-foreground/70 hover:bg-foreground/5'
-                        }`}
-          >
-            {f === 'all' ? `All ${snaps.length}` : SOURCE_LABEL[f]}
-          </button>
-        ))}
+        ) : (
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Pick a version to pin. This file then recovers to exactly that version, whatever you choose on the right.
+          </p>
+        )}
       </div>
 
+      <div className="px-5 pb-2 shrink-0">
+        <Segmented<SrcFilter>
+          size="sm"
+          value={src}
+          onChange={setSrc}
+          ariaLabel="Show versions"
+          options={[
+            { value: 'all', label: 'All', count: snaps.length },
+            { value: 'change', label: 'Saved' },
+            { value: 'manual', label: 'By hand' },
+            { value: 'pre-rewind', label: 'Before restores' },
+          ]}
+        />
+      </div>
 
-      <div className="flex-1 min-h-0 overflow-auto px-3 py-2 space-y-1">
+      <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 scroll-fade-y">
         {isLoading ? (
-          <div className="flex items-center justify-center h-24 gap-2 text-xs text-muted-foreground/60">
-            <Loader2 size={13} className="animate-spin" /> Loading…
-          </div>
+          <div className="grid place-items-center h-24"><Spinner size={16} className="text-faint" /></div>
         ) : list.length === 0 ? (
-          <div className="flex items-center justify-center h-24 text-xs text-muted-foreground/50">
-            No snapshots match.
-          </div>
+          <p className="text-sm text-muted-foreground text-center py-8">No versions of that kind.</p>
         ) : list.map((snap, idx) => {
           const active = snap.id === pinnedId;
           const isLatest = idx === 0 && src === 'all';
+          const source = SOURCE[snap.source] ?? { label: snap.source, Icon: null };
           return (
-            <div
+            <button
               key={snap.id}
-              onClick={() => active ? onUnpin() : onPin(snap.id)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all group
-                          ${active
-                            ? 'bg-amber-400/8 border-amber-400/25 shadow-[inset_0_1px_0_rgba(251,191,36,0.08)]'
-                            : 'bg-foreground/2 border-foreground/5 hover:bg-foreground/5 hover:border-foreground/10'
-                          }`}
+              onClick={() => (active ? onUnpin() : onPin(snap.id))}
+              aria-pressed={active}
+              className={`group w-full flex items-center gap-3 px-3 h-11 rounded-[calc(9px*var(--rs))] text-left
+                          ${active ? 'bg-primary/[0.12] shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.25)]' : 'hover:bg-foreground/[0.045]'}`}
             >
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-[11px] font-mono ${active ? 'text-amber-300/90' : 'text-foreground/70'}`}>
-                    {fmt(snap.createdAt, 'medium')}
-                  </span>
-                  {isLatest && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20 font-medium">
-                      latest
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium ${SOURCE_COLOR[snap.source] ?? 'text-muted-foreground/70 bg-foreground/5 border-foreground/10'}`}>
-                    {SOURCE_LABEL[snap.source] ?? snap.source}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/70 font-mono">{fmtBytes(snap.sizeBytes)}</span>
-                  {snap.deltaBytes !== snap.sizeBytes && (
-                    <span className="text-[10px] text-muted-foreground/50 font-mono">Δ{fmtBytes(snap.deltaBytes)}</span>
-                  )}
-                </div>
-              </div>
-              <Pin size={11} className={`shrink-0 transition-all ${active ? 'text-amber-400 fill-amber-400/50' : 'text-white/10 group-hover:text-white/30'}`} />
-            </div>
+              <span className={`text-sm tabular-nums ${active ? 'font-medium' : 'text-foreground/85'}`}>{fmt(snap.createdAt)}</span>
+              {isLatest && <span className="h-5 px-1.5 rounded-[calc(5px*var(--rs))] grid place-items-center text-2xs font-medium bg-foreground/[0.07] text-muted-foreground">Newest</span>}
+              {source.Icon && <source.Icon size={12} className="text-faint" data-tip={source.label} aria-label={source.label} />}
+              <span className="flex-1" />
+              <span className="text-2xs text-faint tabular-nums">{fmtBytes(snap.sizeBytes)}</span>
+              <Pin size={13} className={`shrink-0 transition-opacity ${active ? 'text-primary' : 'text-faint opacity-0 group-hover:opacity-100'}`} />
+            </button>
           );
         })}
-      </div>
-
-      <div className="px-3 pb-3 pt-1 shrink-0 border-t border-foreground/5 mt-1">
-        <p className="text-[10px] text-muted-foreground/50 leading-relaxed">
-          Pinned files recover to this exact snapshot, ignoring the global snapshot point.
-        </p>
       </div>
     </div>
   );
 }
-
 
 export function FolderRecover() {
   const { id } = useParams<{ id: string }>();
@@ -200,12 +206,12 @@ export function FolderRecover() {
     enabled: folderId != null,
   });
 
-
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
+  const optionsRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(
-    () => filter ? files.filter((f) => f.relPath.toLowerCase().includes(filter.toLowerCase())) : files,
+    () => (filter ? files.filter((f) => f.relPath.toLowerCase().includes(filter.toLowerCase())) : files),
     [files, filter],
   );
 
@@ -225,25 +231,23 @@ export function FolderRecover() {
   function selectAll() { setSelected(new Set(visible.map((f) => f.relPath))); }
   function clearSel() { setSelected(new Set()); }
 
-
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Map<string, number>>(new Map());
   const selFileEntry = useMemo(
-    () => selectedFile ? files.find((f) => f.relPath === selectedFile) ?? null : null,
+    () => (selectedFile ? files.find((f) => f.relPath === selectedFile) ?? null : null),
     [files, selectedFile],
   );
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (document.querySelector('[role="dialog"],[role="alertdialog"]')) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') { e.preventDefault(); selectAll(); return; }
       if (e.key === 'Escape') { if (selectedFile) setSelectedFile(null); else clearSel(); }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-
   }, [visible, selectedFile]);
-
 
   const [mode, setMode] = useState<'export' | 'restore'>('export');
   const [dest, setDest] = useState('');
@@ -256,7 +260,6 @@ export function FolderRecover() {
   const [showIgnore, setShowIgnore] = useState(false);
   const [inclDeleted, setInclDeleted] = useState(false);
 
-
   const [showConfirm, setShowConfirm] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<RecoverProgressPayload | null>(null);
@@ -267,7 +270,6 @@ export function FolderRecover() {
   const [pendingConflicts, setPendingConflicts] = useState<string[]>([]);
   const unlistenRef = useRef<(() => void) | null>(null);
 
-
   const conflictFromPreviewRef = useRef(false);
   useEffect(() => () => { unlistenRef.current?.(); }, []);
 
@@ -276,7 +278,6 @@ export function FolderRecover() {
     const dates = selFiles.map((f) => f.lastSnapshotAt).filter(Boolean) as number[];
     return dates.length ? { min: Math.min(...dates), max: Math.max(...dates) } : null;
   }, [selFiles]);
-
 
   const nthCoverage = useMemo(() => {
     if (snapKind !== 'nthFromLatest' || selFiles.length === 0) return null;
@@ -287,12 +288,10 @@ export function FolderRecover() {
     return { covered, tooFew, noSnaps, total: selFiles.length };
   }, [snapKind, selFiles, nthOffset]);
 
-
   const asOfCoverage = useMemo(() => {
     if (snapKind !== 'asOf' || selFiles.length === 0 || !asOfDate) return null;
     const ts  = new Date(asOfDate).getTime();
     const total = selFiles.length;
-
 
     const noSnaps = selFiles.filter((f) => f.snapshotCount === 0).length;
 
@@ -302,7 +301,6 @@ export function FolderRecover() {
     }
 
     if (snapPreference === 'before') {
-
 
       const sure   = selFiles.filter((f) => f.lastSnapshotAt !== null && f.lastSnapshotAt <= ts).length;
 
@@ -316,12 +314,10 @@ export function FolderRecover() {
 
       const sure   = selFiles.filter((f) => f.lastSnapshotAt !== null && f.lastSnapshotAt >= ts).length;
 
-
       const defNone = selFiles.filter((f) => f.snapshotCount === 0 || (f.lastSnapshotAt !== null && f.lastSnapshotAt < ts)).length;
       const maybe   = total - sure - defNone;
       return { covered: sure, uncertain: Math.max(0, maybe), skipped: defNone, total, exact: false };
     }
-
 
     return { covered: total - noSnaps, uncertain: total - noSnaps, skipped: noSnaps, total, exact: false };
   }, [snapKind, selFiles, asOfDate, snapPreference, toleranceMs]);
@@ -367,112 +363,82 @@ export function FolderRecover() {
 
       setResult(res);
       if (res.abortedReason === 'disk_full') {
-        toast('error', `Recovery stopped: destination full. ${res.succeeded}/${res.total} files written.`);
+        toast('error', `Recovery stopped because the destination is full. ${res.succeeded} of ${plural(res.total, 'file')} written.`);
       } else if (res.failed.length === 0) {
-        const destMsg = mode === 'export' && dest ? ` → ${dest}` : '';
-        toast('success', `Recovered ${res.succeeded} file${res.succeeded !== 1 ? 's' : ''} successfully.${destMsg}`, {
+        toast('success', `Recovered ${plural(res.succeeded, 'file')}.`, {
           action: mode === 'export' && dest ? { label: 'Open folder', onClick: () => void openDest() } : undefined,
         });
       } else {
-        toast('info', `Recovered ${res.succeeded}/${res.total}. ${res.failed.length} failed — see below.`);
+        toast('info', `Recovered ${res.succeeded} of ${plural(res.total, 'file')}. ${res.failed.length} failed, see the details.`);
       }
     } catch (e) { toast('error', String(e)); }
     finally { setRunning(false); unlisten(); unlistenRef.current = null; }
   }
 
   async function openDest() {
-    try { await invoke('open_path', { path: dest }); } catch (e) { toast('error', `Could not open folder: ${String(e)}`); }
+    try { await invoke('open_path', { path: dest }); } catch (e) { toast('error', `Couldn't open the folder: ${String(e)}`); }
   }
 
-  const progressPct = progress && progress.total > 0
-    ? Math.round((progress.processed / progress.total) * 100) : 0;
+  const progressPct = progress && progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
   const pinnedCount = overrides.size;
   const showFilePanel = selectedFile !== null && selFileEntry !== null;
+  const toleranceKey = (Object.keys(TOLERANCE_MS) as Tolerance[]).find((k) => TOLERANCE_MS[k] === toleranceMs) ?? 'none';
+
+  useLayoutEffect(() => {
+    if (showFilePanel || !optionsRef.current) return;
+    gsap.fromTo(optionsRef.current.querySelectorAll('[data-section]'), { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: dur(0.45), stagger: 0.04, ease: 'zftm', clearProps: 'transform' });
+  }, [showFilePanel]);
+
+  function startRecover() {
+    if (selected.size === 0) return;
+    if (mode === 'export' && !dest) { toast('error', 'Pick a folder to copy the files into first.'); return; }
+    if (mode === 'restore') { setShowConfirm(true); return; }
+    void runRecover(buildArgs());
+  }
 
   return (
-    <div className="flex flex-col flex-1 h-full overflow-hidden bg-background">
-
-
-      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border/70 shrink-0">
-        <button
-          onClick={() => navigate(`/folder/${folderId}`)}
-          className="p-1.5 rounded-lg bg-foreground/4 hover:bg-foreground/8 text-muted-foreground/60 hover:text-foreground transition-all border border-foreground/5"
-        >
-          <ArrowLeft size={14} />
-        </button>
-
-        <div className="w-8 h-8 rounded-xl bg-primary/12 border border-primary/20 flex items-center justify-center shrink-0">
-          <History size={15} className="text-primary/80" />
+    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      <header
+        data-tauri-drag-region
+        className="shrink-0 flex items-center gap-3.5 pl-4 pt-5 pb-4"
+        style={{ paddingRight: 'max(1.25rem, var(--controls-space))' }}
+      >
+        <IconButton label="Back to the folder" onClick={() => navigate(`/folder/${folderId}`)}>
+          <ArrowLeft size={17} />
+        </IconButton>
+        <div data-tauri-drag-region className="flex-1 min-w-0">
+          <h1 data-tauri-drag-region className="text-xl font-semibold truncate">Recover files</h1>
+          <div className="flex items-center gap-1.5 min-w-0 text-xs text-faint mt-1">
+            <span data-tauri-drag-region className="shrink-0">From <span className="text-muted-foreground">{folder?.displayName ?? ''}</span></span>
+            <CopyPath path={folder?.path ?? ''} />
+          </div>
         </div>
+      </header>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-semibold text-foreground/90">Recover</h1>
-            <span className="text-muted-foreground/60">·</span>
-            <span className="text-sm text-muted-foreground/60 truncate">{folder?.displayName ?? '…'}</span>
-          </div>
-          <p className="text-[11px] text-muted-foreground/60 font-mono truncate mt-0.5">{folder?.path ?? ''}</p>
-        </div>
-
-        {pinnedCount > 0 && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/20">
-            <Pin size={10} className="text-amber-400 fill-amber-400/60" />
-            <span className="text-[11px] text-amber-400/90 font-medium">{pinnedCount} pinned</span>
-          </div>
-        )}
-
-        {selected.size > 0 && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-primary/8 border border-primary/15">
-            <Layers size={11} className="text-primary/60" />
-            <span className="text-[11px] text-primary/70 font-medium">{selected.size} selected</span>
-          </div>
-        )}
-      </div>
-
-
-      <div className="flex-1 relative overflow-hidden">
-      <div className="absolute inset-0 flex overflow-hidden">
-
-
-        <div className="flex flex-col w-[54%] min-w-0 border-r border-foreground/6 overflow-hidden">
-
-
-          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-foreground/4 shrink-0 bg-foreground/1">
-            <div className="flex items-center gap-1.5 flex-1 bg-foreground/4 rounded-xl px-3 py-1.5 border border-foreground/6 focus-within:border-primary/30 focus-within:bg-primary/5 transition-all">
-              <Search size={11} className="text-muted-foreground/60 shrink-0" />
+      <div className="flex-1 min-h-0 flex border-t border-[hsl(var(--line))]">
+        <div className="w-[44%] min-w-[300px] max-w-[520px] flex flex-col border-r border-[hsl(var(--line))] bg-surface-sunken/40">
+          <div className="flex items-center gap-2 p-2.5 shrink-0">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
               <input
-                type="text"
-                placeholder="Filter files…"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                placeholder="Filter files"
+                aria-label="Filter files"
+                className="field !h-8 pl-8 pr-7 text-sm"
               />
               {filter && (
-                <button onClick={() => setFilter('')} className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
+                <button onClick={() => setFilter('')} aria-label="Clear filter" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center rounded-full text-faint hover:text-foreground hover:bg-foreground/[0.08]">
                   <X size={11} />
                 </button>
               )}
             </div>
-            <button
-              onClick={selectAll}
-              className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-primary/8 border border-primary/15 text-primary/70 hover:bg-primary/15 hover:text-primary hover:border-primary/30 transition-all"
-            >
-              All
-            </button>
-            <button
-              onClick={clearSel}
-              className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-foreground/4 border border-foreground/8 text-muted-foreground/50 hover:bg-foreground/8 hover:text-foreground transition-all"
-            >
-              None
-            </button>
+            <Button size="sm" variant="ghost" onClick={selectAll} data-tip="Select every file shown (Ctrl A)">All</Button>
+            <Button size="sm" variant="ghost" onClick={clearSel} disabled={selected.size === 0}>None</Button>
           </div>
-
-
-          <div className="flex-1 overflow-auto p-2">
+          <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-4 scroll-fade-y">
             {isLoading ? (
-              <div className="flex items-center justify-center h-32 gap-2 text-xs text-muted-foreground/60">
-                <Loader2 size={14} className="animate-spin" /> Loading…
-              </div>
+              <div className="grid place-items-center h-32"><Spinner size={16} className="text-faint" /></div>
             ) : (
               <RecoverTree
                 files={files}
@@ -486,19 +452,15 @@ export function FolderRecover() {
               />
             )}
           </div>
-
-
-          <div className="px-3 py-2 border-t border-foreground/4 shrink-0">
-            <p className="text-[10px] text-muted-foreground/50">
-              Click a filename to view its snapshot history and pin a specific version.
-            </p>
-          </div>
+          <p className="shrink-0 px-4 py-2.5 text-2xs text-faint border-t border-[hsl(var(--line))] flex items-center gap-1.5">
+            <MousePointerClick size={11} />Click a file name to pin one of its versions.
+          </p>
         </div>
 
-
-        <div className="flex flex-col w-[46%] overflow-hidden bg-card/20">
+        <div className="flex-1 min-w-0 flex flex-col">
           {showFilePanel ? (
             <FileSnapshotPanel
+              key={selFileEntry.id}
               file={selFileEntry}
               pinnedId={overrides.get(selectedFile!)}
               onPin={(sid) => setOverrides((p) => new Map(p).set(selectedFile!, sid))}
@@ -506,423 +468,225 @@ export function FolderRecover() {
               onClose={() => setSelectedFile(null)}
             />
           ) : (
-            <div className="flex-1 overflow-auto">
-
-              {isOnChange && snapKind === 'latest' && (
-                <div className="mx-4 mt-4 flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-amber-400/6 border border-amber-400/18">
-                  <AlertTriangle size={13} className="text-amber-400 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-amber-300/75 leading-relaxed">
-                    <strong className="font-semibold text-amber-300/90">"Latest" is your most recent save</strong>, which
-                    may be the broken version. Click a file to pick an earlier snapshot for it.
-                  </p>
-                </div>
-              )}
-
-              <div className="p-4 space-y-5">
-
-
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground mb-2.5">
-                    Recovery mode
-                  </p>
+            <div ref={optionsRef} className="flex-1 min-h-0 overflow-y-auto scroll-fade-y">
+              <div className="max-w-[560px] px-6 py-5 space-y-7">
+                <Section title="Where the files go">
                   <div className="grid grid-cols-2 gap-2">
                     {([
-                      { k: 'export',  icon: FolderDown, label: 'Export',  sub: 'Copy to another folder', accent: 'primary' },
-                      { k: 'restore', icon: RotateCcw,  label: 'Restore', sub: 'Overwrite in place',     accent: 'red' },
-                    ] as const).map(({ k, icon: Icon, label, sub, accent }) => (
-                      <button
-                        key={k}
-                        onClick={() => setMode(k)}
-                        className={`flex flex-col gap-1.5 items-start px-3.5 py-3 rounded-xl border text-left transition-all
-                                    ${mode === k
-                                      ? accent === 'red'
-                                        ? 'bg-red-500/10 border-red-500/30'
-                                        : 'bg-primary/10 border-primary/30'
-                                      : 'bg-foreground/2 border-foreground/6 hover:bg-foreground/5 hover:border-foreground/12'
-                                    }`}
-                      >
-                        <Icon size={15} className={mode === k
-                          ? accent === 'red' ? 'text-red-400' : 'text-primary'
-                          : 'text-muted-foreground/70'}
-                        />
-                        <div>
-                          <p className={`text-xs font-semibold ${mode === k ? (accent === 'red' ? 'text-red-400' : 'text-primary') : 'text-foreground/70'}`}>
-                            {label}
-                          </p>
-                          <p className={`text-[10px] ${mode === k ? (accent === 'red' ? 'text-red-400/50' : 'text-primary/50') : 'text-muted-foreground/60'}`}>
-                            {sub}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
+                      { k: 'export', Icon: FolderDown, label: 'Copy to a folder', sub: 'Your current files stay untouched' },
+                      { k: 'restore', Icon: RotateCcw, label: 'Replace in place', sub: 'Overwrites the files on disk' },
+                    ] as const).map(({ k, Icon, label, sub }) => {
+                      const on = mode === k;
+                      const danger = k === 'restore';
+                      return (
+                        <button
+                          key={k}
+                          onClick={() => setMode(k)}
+                          aria-pressed={on}
+                          className={`press flex flex-col items-start gap-2 p-3.5 rounded-xl text-left transition-[background-color,box-shadow] duration-200
+                                      ${on
+                                        ? danger ? 'bg-destructive/[0.08] shadow-[inset_0_0_0_1.5px_hsl(var(--destructive)/0.5)]' : 'bg-primary/[0.08] shadow-[inset_0_0_0_1.5px_hsl(var(--primary)/0.55)]'
+                                        : 'bg-foreground/[0.03] shadow-[inset_0_0_0_1px_hsl(var(--line))] hover:bg-foreground/[0.055]'}`}
+                        >
+                          <Icon size={17} className={on ? (danger ? 'text-destructive' : 'text-primary') : 'text-muted-foreground'} />
+                          <span>
+                            <span className="block text-sm font-medium">{label}</span>
+                            <span className="block text-xs text-muted-foreground mt-0.5">{sub}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                </div>
-
-
-                {mode === 'export' && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-2.5">
-                      Destination
-                    </p>
-                    <div className="flex gap-2">
-                      <div
-                        className="flex-1 px-3 py-2.5 rounded-xl bg-foreground/3 border border-foreground/8 text-[11px] font-mono text-foreground/50 truncate"
-                        title={dest}
-                      >
-                        {dest || <span className="text-muted-foreground/50">No folder selected</span>}
+                  {mode === 'export' && (
+                    <div className="mt-3 flex gap-2">
+                      <div className="field flex items-center text-sm truncate cursor-default" title={dest}>
+                        {dest ? <span className="font-mono text-xs truncate">{formatPath(dest)}</span> : <span className="text-faint">No folder chosen</span>}
                       </div>
-                      <button
-                        onClick={() => void (async () => { const p = await pickFolder(); if (p) setDest(p); })()}
-                        className="px-3 py-2.5 rounded-xl border border-foreground/10 bg-foreground/4 hover:bg-foreground/8 text-muted-foreground/50 hover:text-foreground transition-all"
-                      >
-                        <FolderOpen size={13} />
-                      </button>
+                      <Button icon={<FolderOpen size={14} />} onClick={() => void (async () => { const p = await pickFolder(); if (p) setDest(p); })()}>
+                        Choose
+                      </Button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </Section>
 
+                <Section
+                  title="Which version"
+                  aside={pinnedCount > 0 ? <span className="text-xs text-primary inline-flex items-center gap-1"><Pin size={11} />{plural(pinnedCount, 'file')} pinned</span> : undefined}
+                >
+                  <Segmented<'latest' | 'nthFromLatest' | 'asOf'>
+                    value={snapKind}
+                    onChange={setSnapKind}
+                    ariaLabel="Which version"
+                    options={[
+                      { value: 'latest', label: 'Newest' },
+                      { value: 'nthFromLatest', label: 'Saves back' },
+                      { value: 'asOf', label: 'At a time' },
+                    ]}
+                  />
 
-                <div>
-                  <div className="flex items-center justify-between mb-2.5">
-                    <p className="text-xs font-semibold text-muted-foreground">
-                      Snapshot point
-                    </p>
-                    {pinnedCount > 0 && (
-                      <span className="text-[10px] text-amber-400/60 font-medium">
-                        {pinnedCount} file{pinnedCount !== 1 ? 's' : ''} use pinned version
-                      </span>
-                    )}
-                  </div>
-
-
-                  <div className="flex p-1 rounded-xl bg-foreground/3 border border-foreground/6 gap-0.5">
-                    {([
-                      { k: 'latest',        label: 'Latest' },
-                      { k: 'nthFromLatest', label: 'Versions back' },
-                      { k: 'asOf',          label: 'As of'  },
-                    ] as const).map(({ k, label }) => (
-                      <button
-                        key={k}
-                        onClick={() => setSnapKind(k)}
-                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition-all
-                                    ${snapKind === k
-                                      ? 'bg-primary/20 text-primary shadow-sm border border-primary/25'
-                                      : 'text-muted-foreground/70 hover:text-foreground/70'
-                                    }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
+                  {snapKind === 'latest' && (
+                    <div className="mt-3">
+                      {isOnChange ? (
+                        <Notice tone="caution" icon={<TriangleAlert size={13} />}>
+                          The newest version is your most recent save, which may be the broken one. Pick “Saves back” or a time, or pin an earlier version per file.
+                        </Notice>
+                      ) : (
+                        <Notice>Each file comes back as its most recently kept version.</Notice>
+                      )}
+                    </div>
+                  )}
 
                   {snapKind === 'nthFromLatest' && (
-                    <div className="mt-3 space-y-2.5">
-                      <div className="flex gap-1.5 flex-wrap">
+                    <div className="mt-3 space-y-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {[1, 2, 5, 10].map((n) => (
                           <button
                             key={n}
                             onClick={() => setNthOffset(n)}
-                            className={`px-3 py-1.5 rounded-lg border text-[11px] font-mono font-medium transition-all
-                                        ${nthOffset === n
-                                          ? 'bg-primary/15 border-primary/30 text-primary'
-                                          : 'bg-foreground/3 border-foreground/8 text-muted-foreground/50 hover:border-foreground/15 hover:text-foreground/70'
-                                        }`}
+                            aria-pressed={nthOffset === n}
+                            className={`press h-8 px-3 rounded-lg text-xs font-medium tabular-nums transition-colors
+                                        ${nthOffset === n ? 'bg-primary text-primary-foreground' : 'bg-foreground/[0.045] text-muted-foreground hover:text-foreground hover:bg-foreground/[0.08]'}`}
                           >
-                            ←{n}
+                            {n} back
                           </button>
                         ))}
-                        <div className="flex items-center gap-1.5 ml-auto">
-                          <span className="text-[10px] text-muted-foreground/60">custom</span>
+                        <label className="flex items-center gap-2 ml-auto text-xs text-muted-foreground">
+                          Other
                           <input
                             type="number" min={1} max={9999}
                             value={nthOffset}
                             onChange={(e) => setNthOffset(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-14 px-2 py-1.5 rounded-lg bg-secondary/60 border border-border/50 text-[11px] font-mono text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            className="field !h-8 !w-16 text-center tabular-nums"
                           />
-                        </div>
+                        </label>
                       </div>
-                      <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-foreground/2 border border-foreground/5">
-                        <Info size={10} className="text-muted-foreground/60 shrink-0" />
-                        <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
-                          Each file goes back{' '}
-                          <strong className="text-foreground/60">
-                            {nthOffset} save{nthOffset !== 1 ? 's' : ''}
-                          </strong>{' '}
-                          from its own latest snapshot.{' '}
-                          ←1 = undo the last save, ←5 = 5 saves ago.
-                          Files with fewer saves than this number are skipped.
-                        </p>
-                      </div>
-
+                      <Notice>
+                        Each file goes back {plural(nthOffset, 'save')} from its own newest version. 1 undoes the last save. Files with fewer saves are skipped.
+                      </Notice>
                       {nthCoverage && (
-                        <div className={`px-3 py-2.5 rounded-xl border space-y-1.5
-                                        ${nthCoverage.covered === nthCoverage.total
-                                          ? 'bg-emerald-500/5 border-emerald-500/15'
-                                          : 'bg-amber-400/5 border-amber-400/15'
-                                        }`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-muted-foreground/50 font-medium">Coverage</span>
-                            <span className={`text-[11px] font-semibold font-mono
-                                            ${nthCoverage.covered === nthCoverage.total ? 'text-emerald-400' : 'text-amber-400'}`}>
-                              {nthCoverage.covered}/{nthCoverage.total} files
-                            </span>
-                          </div>
-                          {nthCoverage.tooFew > 0 && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-amber-400/70">
-                              <AlertTriangle size={9} className="shrink-0" />
-                              <span>
-                                {nthCoverage.tooFew} file{nthCoverage.tooFew !== 1 ? 's' : ''} have fewer than {nthOffset + 1} snapshots
-                                — <strong>will be skipped</strong>
-                              </span>
-                            </div>
-                          )}
-                          {nthCoverage.noSnaps > 0 && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-red-400/70">
-                              <XCircle size={9} className="shrink-0" />
-                              <span>
-                                {nthCoverage.noSnaps} file{nthCoverage.noSnaps !== 1 ? 's' : ''} have no snapshots at all
-                              </span>
-                            </div>
-                          )}
-                          {nthCoverage.covered === nthCoverage.total && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/70">
-                              <CheckCircle2 size={9} className="shrink-0" />
-                              All selected files have enough history.
-                            </div>
-                          )}
+                        <div className="space-y-1.5 px-1">
+                          <p className="text-xs font-medium">
+                            <span className={nthCoverage.covered === nthCoverage.total ? 'text-positive' : 'text-caution'}>{nthCoverage.covered}</span>
+                            <span className="text-muted-foreground"> of {plural(nthCoverage.total, 'file')} can go back that far</span>
+                          </p>
+                          {nthCoverage.tooFew > 0 && <CoverageRow tone="caution">{plural(nthCoverage.tooFew, 'file')} with fewer than {nthOffset + 1} versions will be skipped.</CoverageRow>}
+                          {nthCoverage.noSnaps > 0 && <CoverageRow tone="neg">{plural(nthCoverage.noSnaps, 'file')} with no versions at all.</CoverageRow>}
                         </div>
                       )}
                     </div>
                   )}
 
-
                   {snapKind === 'asOf' && (
-                    <div className="mt-3 space-y-3">
-                      <DateTimePicker
-                        value={asOfDate}
-                        onChange={setAsOfDate}
-                        placeholder="Pick a point in time…"
-                      />
-
-
+                    <div className="mt-3 space-y-4">
+                      <DateTimePicker value={asOfDate} onChange={setAsOfDate} placeholder="Pick a point in time" />
                       <div>
-                        <p className="text-[10px] text-muted-foreground/70 mb-1.5 flex items-center gap-1">
-                          <Clock size={9} /> Snapshot direction
-                        </p>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {([
-                            {
-                              k: 'before' as const,
-                              label: 'Before',
-                              sub: 'Latest snapshot at or before chosen time',
-                              icon: '←',
-                            },
-                            {
-                              k: 'after' as const,
-                              label: 'After',
-                              sub: 'Earliest snapshot at or after chosen time',
-                              icon: '→',
-                            },
-                            {
-                              k: 'nearest' as const,
-                              label: 'Nearest',
-                              sub: 'Closest snapshot in either direction',
-                              icon: '↔',
-                            },
-                          ]).map(({ k, label, sub, icon }) => (
-                            <button
-                              key={k}
-                              onClick={() => setSnapPreference(k)}
-                              title={sub}
-                              className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl border text-center transition-all
-                                          ${snapPreference === k
-                                            ? 'bg-primary/15 border-primary/30 text-primary'
-                                            : 'bg-foreground/2 border-foreground/6 text-muted-foreground/70 hover:bg-foreground/5 hover:text-foreground/70'
-                                          }`}
-                            >
-                              <span className="text-[13px] font-mono font-bold leading-none">{icon}</span>
-                              <span className="text-[10px] font-semibold">{label}</span>
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground/60 mt-1.5 leading-relaxed">
+                        <p className="text-xs text-muted-foreground mb-2">If there's no version at exactly that time, use the one</p>
+                        <Segmented<SnapshotPreference>
+                          size="sm"
+                          value={snapPreference}
+                          onChange={setSnapPreference}
+                          ariaLabel="Direction"
+                          options={[
+                            { value: 'before', label: 'Just before' },
+                            { value: 'after', label: 'Just after' },
+                            { value: 'nearest', label: 'Closest' },
+                          ]}
+                        />
+                        <p className="text-xs text-faint mt-2 leading-relaxed">
                           {snapPreference === 'before'
-                            ? 'Safe default. Gets the state just before your chosen time — you always recover a known past version.'
+                            ? 'The safe choice. You always get a version that existed at that moment.'
                             : snapPreference === 'after'
-                              ? 'Gets the version saved right after your chosen time. Useful when you know something happened and want the result.'
-                              : 'Gets whichever snapshot is closest in time. Most flexible; may grab a newer version than expected.'}
+                              ? 'Useful when you know something happened and want the result of it.'
+                              : 'Whichever is closer in time. This may pick a newer version than you expect.'}
                         </p>
                       </div>
-
-
                       <div>
-                        <p className="text-[10px] text-muted-foreground/70 mb-1.5 flex items-center gap-1">
-                          <AlertCircle size={9} /> Tolerance window
-                          <span className="text-muted-foreground/50 ml-0.5">(optional)</span>
-                        </p>
-                        <div className="flex gap-1.5 flex-wrap">
-                          {([
-                            { label: 'None', value: null },
-                            { label: '±1h',  value: 3_600_000 },
-                            { label: '±6h',  value: 21_600_000 },
-                            { label: '±1d',  value: 86_400_000 },
-                          ] as const).map(({ label, value }) => (
-                            <button
-                              key={label}
-                              onClick={() => setToleranceMs(value)}
-                              className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-medium transition-all
-                                          ${toleranceMs === value
-                                            ? 'bg-primary/15 border-primary/30 text-primary'
-                                            : 'bg-foreground/2 border-foreground/6 text-muted-foreground/70 hover:text-foreground/70 hover:bg-foreground/5'
-                                          }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        {toleranceMs !== null && (
-                          <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                            Files with no snapshot within{' '}
-                            <strong className="text-foreground/50">
-                              {toleranceMs >= 86_400_000
-                                ? `${toleranceMs / 86_400_000}d`
-                                : `${toleranceMs / 3_600_000}h`}
-                            </strong>{' '}
-                            of the chosen time will be skipped.
-                          </p>
-                        )}
+                        <p className="text-xs text-muted-foreground mb-2">Only if it's within</p>
+                        <Segmented<Tolerance>
+                          size="sm"
+                          value={toleranceKey}
+                          onChange={(k) => setToleranceMs(TOLERANCE_MS[k])}
+                          ariaLabel="Tolerance"
+                          options={[
+                            { value: 'none', label: 'Any time' },
+                            { value: '1h', label: '1 hour' },
+                            { value: '6h', label: '6 hours' },
+                            { value: '1d', label: '1 day' },
+                          ]}
+                        />
                       </div>
-
 
                       {asOfCoverage && (
-                        <div className={`px-3 py-2.5 rounded-xl border space-y-1.5
-                                        ${asOfCoverage.skipped > 0
-                                          ? 'bg-amber-400/4 border-amber-400/15'
-                                          : 'bg-emerald-500/4 border-emerald-500/12'
-                                        }`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-muted-foreground/50 font-medium">
-                              Coverage{!asOfCoverage.exact && <span className="text-muted-foreground/60"> (estimate)</span>}
+                        <div className="space-y-1.5 px-1">
+                          <p className="text-xs font-medium">
+                            <span className={asOfCoverage.skipped === 0 ? 'text-positive' : 'text-caution'}>
+                              {asOfCoverage.exact ? asOfCoverage.covered : `About ${asOfCoverage.covered}`}
                             </span>
-                            <span className={`text-[11px] font-semibold font-mono
-                                            ${asOfCoverage.skipped === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                              {asOfCoverage.exact
-                                ? `${asOfCoverage.covered}/${asOfCoverage.total}`
-                                : `~${asOfCoverage.covered}/${asOfCoverage.total}`}
-                            </span>
-                          </div>
-
+                            <span className="text-muted-foreground"> of {plural(asOfCoverage.total, 'file')} have a matching version</span>
+                          </p>
                           {asOfCoverage.exact && snapPreference === 'nearest' && toleranceMs === null && (
-                            <div className="flex items-start gap-1.5 text-[10px] text-emerald-400/70">
-                              <CheckCircle2 size={9} className="shrink-0 mt-0.5" />
-                              <span>
-                                <strong>Nearest + no tolerance</strong> — guaranteed: any file with ≥1 snapshot
-                                is always covered, no matter how old.
-                              </span>
-                            </div>
+                            <CoverageRow tone="pos">With “Closest” and any time, every file that has at least one version is covered.</CoverageRow>
                           )}
-
-                          {asOfCoverage.covered > 0 && !asOfCoverage.exact && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60">
-                              <CheckCircle2 size={9} className="shrink-0" />
-                              {asOfCoverage.covered} file{asOfCoverage.covered !== 1 ? 's' : ''} confirmed covered
-                            </div>
-                          )}
-
                           {asOfCoverage.uncertain > 0 && !asOfCoverage.exact && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-amber-400/60">
-                              <AlertTriangle size={9} className="shrink-0" />
-                              {asOfCoverage.uncertain} file{asOfCoverage.uncertain !== 1 ? 's' : ''} uncertain
-                              {snapPreference === 'before'
-                                ? ' — have older snapshots, may or may not be before chosen time'
-                                : ' — use Preview to verify'}
-                            </div>
+                            <CoverageRow tone="caution">
+                              {plural(asOfCoverage.uncertain, 'file')} {asOfCoverage.uncertain === 1 ? 'is' : 'are'} unsure{snapPreference === 'before' ? ': older versions exist, but maybe not before that time.' : '.'}
+                            </CoverageRow>
                           )}
-
                           {asOfCoverage.skipped > 0 && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-red-400/70">
-                              <XCircle size={9} className="shrink-0" />
-                              {asOfCoverage.skipped} file{asOfCoverage.skipped !== 1 ? 's' : ''} will be skipped
-                              {snapPreference === 'before' ? ' — no snapshot before chosen time' : ' — no snapshots at all'}
-                            </div>
+                            <CoverageRow tone="neg">
+                              {plural(asOfCoverage.skipped, 'file')} will be skipped{snapPreference === 'before' ? ', with no version before that time.' : ', with no versions at all.'}
+                            </CoverageRow>
                           )}
-
                           {(!asOfCoverage.exact || asOfCoverage.skipped > 0) && (
-                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground/50 border-t border-foreground/4 pt-1.5 mt-0.5">
-                              <Eye size={9} />
-                              <span>Hit <strong className="text-foreground/35">Preview</strong> for exact per-file results before recovering.</span>
-                            </div>
+                            <p className="text-xs text-faint pt-1">Preview shows the exact result for each file.</p>
                           )}
                         </div>
                       )}
 
-
-                      <label className="flex items-center gap-2.5 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={inclDeleted}
-                          onChange={(e) => setInclDeleted(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="relative w-8 h-[18px] rounded-full border border-border bg-secondary/60
-                                        peer-checked:bg-primary peer-checked:border-primary transition-colors shrink-0">
-                          <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-foreground/50
-                                          peer-checked:translate-x-3.5 peer-checked:bg-white
-                                          transition-transform shadow-sm" />
-                        </div>
-                        <span className="text-[11px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors">
-                          Include files deleted after this time
-                        </span>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <span className="flex-1 text-sm">Include files deleted after this time</span>
+                        <Switch checked={inclDeleted} onChange={setInclDeleted} label="Include files deleted after this time" />
                       </label>
                     </div>
                   )}
-                </div>
+                </Section>
 
-
-                <div>
+                <section data-section>
                   <button
                     onClick={() => setShowIgnore((v) => !v)}
-                    className="flex items-center gap-2 w-full text-xs font-semibold text-muted-foreground hover:text-muted-foreground transition-colors"
+                    aria-expanded={showIgnore}
+                    className="flex items-center gap-2 w-full text-sm font-semibold"
                   >
-                    Ignore patterns
-                    <ChevronDown size={11} className={`ml-auto transition-transform ${showIgnore ? 'rotate-180' : ''}`} />
+                    Skip these paths
+                    <span className="text-xs font-normal text-faint">{ignorePatterns.split('\n').filter((l) => l.trim()).length} rules</span>
+                    <ChevronDown size={14} className={`ml-auto text-faint transition-transform duration-300 ease-zftm ${showIgnore ? 'rotate-180' : ''}`} />
                   </button>
                   {showIgnore && (
-                    <div className="mt-2.5">
+                    <div className="mt-2.5 animate-fade-in">
                       <textarea
                         value={ignorePatterns}
                         onChange={(e) => setIgnorePatterns(e.target.value)}
-                        rows={5}
-                        placeholder="node_modules/&#10;target/&#10;.git/"
-                        className="w-full px-3 py-2.5 rounded-xl bg-secondary/50 border border-border/50 text-[11px]
-                                   font-mono text-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/30
-                                   resize-none leading-relaxed focus:border-primary/30 transition-all"
+                        rows={6}
+                        spellCheck={false}
+                        className="field !h-auto py-2.5 font-mono text-xs leading-relaxed resize-none selectable"
                       />
-                      <p className="text-[10px] text-muted-foreground/60 mt-1.5">One per line, gitignore syntax.</p>
+                      <p className="text-xs text-faint mt-1.5">One per line, written like a .gitignore file.</p>
                     </div>
                   )}
-                </div>
-
+                </section>
 
                 {result && <ResultPanel result={result} />}
 
-
                 {running && progress && (
-                  <div className="rounded-xl border border-foreground/8 bg-foreground/2 p-3.5">
-                    <div className="flex items-center justify-between text-[11px] mb-2">
-                      <span className="text-muted-foreground/50 font-mono">{progress.processed}/{progress.total}</span>
-                      <span className="text-primary/60 font-medium">{progressPct}%</span>
+                  <div className="rounded-xl bg-card shadow-card p-4" role="status">
+                    <div className="flex items-center justify-between text-xs mb-2.5">
+                      <span className="text-muted-foreground tabular-nums">{progress.processed.toLocaleString()} of {progress.total.toLocaleString()}</span>
+                      <span className="font-medium tabular-nums">{progressPct}%</span>
                     </div>
-                    <div className="w-full h-1 bg-foreground/6 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-primary/80 to-primary rounded-full transition-all duration-300"
-                        style={{ width: `${progressPct}%` }}
-                      />
+                    <div className="h-1 rounded-full bg-foreground/[0.07] overflow-hidden">
+                      <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-zftm" style={{ width: `${progressPct}%` }} />
                     </div>
-                    {progress.currentPath && (
-                      <p className="text-[10px] font-mono text-muted-foreground/60 mt-2 truncate">{progress.currentPath}</p>
-                    )}
+                    {progress.currentPath && <p className="text-2xs font-mono text-faint mt-2 truncate">{progress.currentPath}</p>}
                   </div>
                 )}
               </div>
@@ -930,152 +694,88 @@ export function FolderRecover() {
           )}
         </div>
       </div>
-      </div>
 
-
-      <div className="flex items-center gap-3 px-5 py-3.5 border-t border-border/70 shrink-0 bg-chrome/40">
-
-        <div className="flex-1 min-w-0">
+      <footer className="shrink-0 flex items-center gap-3 px-5 h-[60px] border-t border-[hsl(var(--line))]">
+        <div className="flex-1 min-w-0 flex items-center gap-3 text-sm">
           {selected.size > 0 ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-foreground/80">{selected.size} file{selected.size !== 1 ? 's' : ''}</span>
-              {pinnedCount > 0 && (
-                <span className="text-[11px] text-amber-400/60 flex items-center gap-1">
-                  <Pin size={9} /> {pinnedCount} pinned
-                </span>
-              )}
-              {dateRange && (
-                <span className="text-[11px] text-muted-foreground/60 font-mono">
-                  {fmt(dateRange.min)} → {fmt(dateRange.max)}
-                </span>
-              )}
-            </div>
+            <>
+              <span className="font-medium tabular-nums">{plural(selected.size, 'file')} selected</span>
+              {pinnedCount > 0 && <span className="text-xs text-primary inline-flex items-center gap-1"><Pin size={11} />{pinnedCount} pinned</span>}
+              {dateRange && <span className="text-xs text-faint truncate tabular-nums">last changed {fmt(dateRange.min)} to {fmt(dateRange.max)}</span>}
+            </>
           ) : (
-            <p className="text-xs text-muted-foreground/50">Select files from the tree to recover</p>
+            <span className="text-muted-foreground">Tick the files you want back.</span>
           )}
         </div>
-
-
-        <button
-          onClick={() => void runRecover({ ...buildArgs(), dryRun: true })}
-          disabled={selected.size === 0 || running}
-          className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] rounded-xl border border-foreground/10
-                     bg-foreground/4 text-foreground/60 hover:bg-foreground/8 hover:text-foreground hover:border-foreground/18
-                     disabled:opacity-25 disabled:cursor-not-allowed transition-all"
-        >
-          <Eye size={13} />
+        <Button icon={<Eye size={14} />} onClick={() => void runRecover({ ...buildArgs(), dryRun: true })} disabled={selected.size === 0 || running}>
           Preview
-        </button>
-
-
-        <button
-          onClick={() => {
-            if (selected.size === 0) return;
-            if (mode === 'export' && !dest) { toast('error', 'Pick an export destination first.'); return; }
-            if (mode === 'restore') { setShowConfirm(true); return; }
-            void runRecover(buildArgs());
-          }}
+        </Button>
+        <Button
+          variant={mode === 'restore' ? 'danger' : 'primary'}
+          icon={mode === 'restore' ? <RotateCcw size={14} /> : <FolderDown size={14} />}
+          loading={running}
+          onClick={startRecover}
           disabled={selected.size === 0 || running || (mode === 'export' && !dest)}
-          className={`flex items-center gap-2 px-4 py-2 text-[12px] rounded-xl font-semibold transition-all
-                      disabled:opacity-25 disabled:cursor-not-allowed
-                      ${mode === 'restore'
-                        ? 'bg-red-500 text-white hover:bg-red-600'
-                        : 'bg-primary text-primary-foreground shadow-button hover:bg-primary/90'
-                      }`}
         >
-          {running
-            ? <Loader2 size={13} className="animate-spin" />
-            : mode === 'restore' ? <RotateCcw size={13} /> : <FolderDown size={13} />
-          }
-          {running ? 'Recovering…' : `Recover${selected.size > 0 ? ` ${selected.size}` : ''} file${selected.size !== 1 ? 's' : ''}`}
-        </button>
-      </div>
+          {running ? 'Recovering' : mode === 'restore' ? `Replace ${selected.size > 0 ? plural(selected.size, 'file') : 'files'}` : `Copy ${selected.size > 0 ? plural(selected.size, 'file') : 'files'}`}
+        </Button>
+      </footer>
 
-
-      {previewResult && (
-        <PreviewModal
-          result={previewResult}
-          mode={mode}
-          onClose={() => setPreviewResult(null)}
-          onConfirm={() => {
-            setPreviewResult(null);
-            if (mode === 'restore') setShowConfirm(true);
-            else void runRecover(buildArgs());
-          }}
-        />
-      )}
-      {showConfirm && (
-        <RecoverConfirmDialog
-          fileCount={selected.size}
-          totalBytes={0}
-          onConfirm={() => { setShowConfirm(false); void runRecover(buildArgs()); }}
-          onCancel={() => setShowConfirm(false)}
-        />
-      )}
-      {showConflict && (
-        <ConflictDialog
-          conflicts={pendingConflicts}
-          onOverwrite={() => { setConflictPolicy('overwrite'); setShowConflict(false); void runRecover({ ...buildArgs('overwrite'), dryRun: conflictFromPreviewRef.current || undefined }); }}
-          onSkip={() => { setConflictPolicy('skip'); setShowConflict(false); void runRecover({ ...buildArgs('skip'), dryRun: conflictFromPreviewRef.current || undefined }); }}
-          onCancel={() => { setShowConflict(false); setRunning(false); }}
-        />
-      )}
+      <PreviewSheet
+        result={previewResult}
+        mode={mode}
+        onClose={() => setPreviewResult(null)}
+        onConfirm={() => {
+          setPreviewResult(null);
+          if (mode === 'restore') setShowConfirm(true);
+          else void runRecover(buildArgs());
+        }}
+      />
+      <RecoverConfirmDialog
+        open={showConfirm}
+        fileCount={selected.size}
+        onConfirm={() => { setShowConfirm(false); void runRecover(buildArgs()); }}
+        onCancel={() => setShowConfirm(false)}
+      />
+      <ConflictSheet
+        open={showConflict}
+        conflicts={pendingConflicts}
+        onOverwrite={() => { setConflictPolicy('overwrite'); setShowConflict(false); void runRecover({ ...buildArgs('overwrite'), dryRun: conflictFromPreviewRef.current || undefined }); }}
+        onSkip={() => { setConflictPolicy('skip'); setShowConflict(false); void runRecover({ ...buildArgs('skip'), dryRun: conflictFromPreviewRef.current || undefined }); }}
+        onCancel={() => { setShowConflict(false); setRunning(false); }}
+      />
     </div>
   );
 }
 
-
 function ResultPanel({ result }: { result: BulkRecoverResult }) {
   const [open, setOpen] = useState(false);
   const ok = result.failed.length === 0 && !result.abortedReason;
-
   return (
-    <div className={`rounded-xl border p-3.5 text-xs
-                    ${ok
-                      ? 'bg-emerald-500/6 border-emerald-500/18'
-                      : 'bg-red-500/6 border-red-500/18'
-                    }`}>
-      <div className="flex items-center gap-2 flex-wrap gap-y-1">
-        {ok
-          ? <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
-          : <XCircle size={14} className="text-red-400 shrink-0" />
-        }
-        <span className={`font-semibold ${ok ? 'text-emerald-400' : 'text-red-400'}`}>
-          {result.dryRun ? 'Preview: ' : ''}{result.succeeded}/{result.total} written
+    <div className="rounded-xl bg-card shadow-card p-4 animate-scale-in">
+      <div className="flex items-center gap-2.5">
+        <span className={`w-7 h-7 rounded-full grid place-items-center ${ok ? 'bg-positive/12 text-positive' : 'bg-negative/12 text-negative'}`}>
+          {ok ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
         </span>
-        {result.skipped > 0 && (
-          <span className="text-amber-400/60 text-[10px]">{result.skipped} skipped (conflict)</span>
-        )}
-        {!result.dryRun && (
-          <span className="text-muted-foreground/70 ml-auto font-mono">{fmtBytes(result.bytesWritten)}</span>
-        )}
-        {result.dryRun && (
-          <span className="text-muted-foreground/60 ml-auto text-[10px]">dry run</span>
-        )}
+        <span className="text-sm font-medium flex-1">
+          {result.succeeded.toLocaleString()} of {plural(result.total, 'file')} recovered
+        </span>
+        <span className="text-xs text-faint tabular-nums">{fmtBytes(result.bytesWritten)}</span>
       </div>
-
-      {result.abortedReason === 'disk_full' && (
-        <div className="flex items-center gap-1.5 mt-2 text-red-400/70">
-          <AlertCircle size={11} />
-          <span>Stopped: destination disk full</span>
-        </div>
-      )}
-
+      {result.skipped > 0 && <p className="text-xs text-muted-foreground mt-2 ml-[38px]">{plural(result.skipped, 'file')} skipped because they already existed.</p>}
+      {result.abortedReason === 'disk_full' && <p className="text-xs text-negative mt-2 ml-[38px]">Stopped early because the destination disk is full.</p>}
       {result.failed.length > 0 && (
-        <div className="mt-2.5">
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="flex items-center gap-1 text-muted-foreground/50 hover:text-foreground transition-colors"
-          >
-            <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-            {result.failed.length} failed
+        <div className="mt-2 ml-[38px]">
+          <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <ChevronDown size={12} className={`transition-transform duration-300 ease-zftm ${open ? 'rotate-180' : ''}`} />
+            {plural(result.failed.length, 'file')} failed
           </button>
           {open && (
-            <div className="mt-2 space-y-1 max-h-36 overflow-auto">
+            <div className="mt-2 space-y-1 max-h-40 overflow-auto selectable">
               {result.failed.map((f) => (
-                <div key={f.relPath} className="font-mono text-[10px] text-red-400/60 leading-relaxed">
-                  <span className="text-foreground/40">{f.relPath}:</span> {f.error}
-                </div>
+                <p key={f.relPath} className="font-mono text-2xs leading-relaxed">
+                  <span className="text-foreground/70">{f.relPath}</span> <span className="text-negative">{f.error}</span>
+                </p>
               ))}
             </div>
           )}
@@ -1085,174 +785,97 @@ function ResultPanel({ result }: { result: BulkRecoverResult }) {
   );
 }
 
-
-function PreviewModal({ result, mode, onClose, onConfirm }: {
-  result: BulkRecoverResult;
+function PreviewSheet({ result, mode, onClose, onConfirm }: {
+  result: BulkRecoverResult | null;
   mode: 'export' | 'restore';
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const covered = result.preview?.filter((p) => !p.skipReason) ?? [];
-  const skipped = result.preview?.filter((p) => !!p.skipReason) ?? result.failed.map((f) => ({ relPath: f.relPath, skipReason: f.error, snapshotAt: null, snapshotSource: null, sizeBytes: null }));
   const [tab, setTab] = useState<'covered' | 'skipped'>('covered');
+  const last = useRef<BulkRecoverResult | null>(null);
+  if (result) last.current = result;
+  const r = result ?? last.current;
+  useEffect(() => { if (result) setTab('covered'); }, [result]);
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4">
-      <div className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-overlay animate-fade-in flex flex-col max-h-[82vh]">
+  const covered = r?.preview?.filter((p) => !p.skipReason) ?? [];
+  const skipped = r?.preview?.filter((p) => !!p.skipReason)
+    ?? r?.failed.map((f) => ({ relPath: f.relPath, skipReason: f.error, snapshotAt: null, snapshotSource: null, sizeBytes: null })) ?? [];
 
-
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-foreground/6 shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-            <Eye size={15} className="text-primary" />
+  return (
+    <Sheet open={!!result} onClose={onClose} width={620} label="Preview" className="max-h-[84vh]">
+      <SheetHeader
+        icon={<Eye size={18} />}
+        title="Preview"
+        description={r ? `${plural(r.succeeded, 'file')} would be recovered, ${fmtBytes(r.bytesWritten)} in total.${skipped.length ? ` ${plural(skipped.length, 'file')} would be skipped.` : ''}` : null}
+        onClose={onClose}
+      />
+      {skipped.length > 0 && (
+        <div className="px-6 pt-2 shrink-0">
+          <Segmented<'covered' | 'skipped'>
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            ariaLabel="Preview list"
+            options={[{ value: 'covered', label: 'Recovered', count: covered.length }, { value: 'skipped', label: 'Skipped', count: skipped.length }]}
+          />
+        </div>
+      )}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 scroll-fade-y">
+        {tab === 'covered' && covered.length === 0 && <p className="text-sm text-muted-foreground text-center py-10">No file would be recovered with these settings.</p>}
+        {tab === 'covered' && covered.map((item) => (
+          <div key={item.relPath} className="flex items-center gap-3 h-10 px-2.5 rounded-[calc(9px*var(--rs))] hover:bg-foreground/[0.04]">
+            <FileIcon path={item.relPath} size={14} className="text-muted-foreground" />
+            <span className="text-sm font-mono flex-1 min-w-0 truncate" title={item.relPath}>{item.relPath}</span>
+            {item.snapshotSource && SOURCE[item.snapshotSource]?.Icon && (() => { const I = SOURCE[item.snapshotSource!].Icon!; return <I size={12} className="text-faint" aria-label={SOURCE[item.snapshotSource!].label} />; })()}
+            {item.snapshotAt && <span className="text-xs text-muted-foreground tabular-nums shrink-0">{fmt(item.snapshotAt)}</span>}
+            {item.sizeBytes != null && <span className="text-2xs text-faint tabular-nums w-14 text-right shrink-0">{fmtBytes(item.sizeBytes)}</span>}
           </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-foreground/90">Recovery Preview</h2>
-            <p className="text-[11px] text-muted-foreground/50 font-mono mt-0.5">
-              {result.succeeded} file{result.succeeded !== 1 ? 's' : ''} · {fmtBytes(result.bytesWritten)}
-              {skipped.length > 0 && (
-                <span className="text-amber-400/60"> · {skipped.length} would be skipped</span>
-              )}
-            </p>
+        ))}
+        {tab === 'skipped' && skipped.map((item) => (
+          <div key={item.relPath} className="flex items-center gap-3 h-10 px-2.5 rounded-[calc(9px*var(--rs))]">
+            <XCircle size={13} className="text-negative shrink-0" />
+            <span className="text-sm font-mono text-muted-foreground flex-1 min-w-0 truncate" title={item.relPath}>{item.relPath}</span>
+            <span className="text-xs text-faint shrink-0 max-w-[200px] truncate" title={item.skipReason ?? ''}>{item.skipReason}</span>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-foreground/6 text-muted-foreground/70 hover:text-foreground transition-all">
-            <X size={13} />
-          </button>
-        </div>
-
-
-        <div className="flex px-4 pt-3 gap-1 shrink-0">
-          <button
-            onClick={() => setTab('covered')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all
-                        ${tab === 'covered' ? 'bg-emerald-500/12 text-emerald-400 border border-emerald-500/20' : 'text-muted-foreground/70 hover:text-foreground/60'}`}
-          >
-            <CheckCircle2 size={11} />
-            Would recover ({covered.length})
-          </button>
-          {skipped.length > 0 && (
-            <button
-              onClick={() => setTab('skipped')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all
-                          ${tab === 'skipped' ? 'bg-red-500/10 text-red-400 border border-red-500/18' : 'text-muted-foreground/70 hover:text-foreground/60'}`}
-            >
-              <XCircle size={11} />
-              Would skip ({skipped.length})
-            </button>
-          )}
-        </div>
-
-
-        <div className="flex-1 overflow-auto px-4 py-3 space-y-1">
-          {tab === 'covered' && covered.length === 0 && (
-            <div className="flex items-center justify-center h-24 text-xs text-muted-foreground/50">
-              No files would be recovered with these settings.
-            </div>
-          )}
-          {tab === 'covered' && covered.map((item) => (
-            <div key={item.relPath} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-emerald-500/4 border border-emerald-500/8 group">
-              <FileText size={11} className="text-emerald-400/40 shrink-0" />
-              <span className="text-[11px] font-mono text-foreground/70 flex-1 min-w-0 truncate" title={item.relPath}>
-                {item.relPath}
-              </span>
-              <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                {item.snapshotSource && (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md border font-medium ${SOURCE_COLOR[item.snapshotSource] ?? 'text-muted-foreground/70 bg-foreground/5 border-foreground/10'}`}>
-                    {SOURCE_LABEL[item.snapshotSource] ?? item.snapshotSource}
-                  </span>
-                )}
-                {item.snapshotAt && (
-                  <span className="text-[10px] font-mono text-muted-foreground/70">{fmt(item.snapshotAt)}</span>
-                )}
-                {item.sizeBytes != null && (
-                  <span className="text-[10px] font-mono text-muted-foreground/60">{fmtBytes(item.sizeBytes)}</span>
-                )}
-              </div>
-
-              {item.snapshotAt && (
-                <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 group-hover:hidden">
-                  {fmt(item.snapshotAt)}
-                </span>
-              )}
-            </div>
-          ))}
-          {tab === 'skipped' && skipped.map((item) => (
-            <div key={item.relPath} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-red-500/4 border border-red-500/8">
-              <XCircle size={11} className="text-red-400/40 shrink-0" />
-              <span className="text-[11px] font-mono text-foreground/50 flex-1 min-w-0 truncate" title={item.relPath}>
-                {item.relPath}
-              </span>
-              <span className="text-[10px] text-red-400/50 shrink-0 max-w-[160px] truncate" title={item.skipReason ?? ''}>
-                {item.skipReason}
-              </span>
-            </div>
-          ))}
-        </div>
-
-
-        <div className="flex items-center gap-2 px-5 py-4 border-t border-foreground/6 shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-foreground/8 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
-          >
-            Cancel
-          </button>
-          <div className="flex-1" />
-          {result.succeeded === 0 ? (
-            <p className="text-[11px] text-amber-400/60 flex items-center gap-1.5">
-              <AlertTriangle size={11} />
-              No files would be recovered — adjust settings and try again.
-            </p>
-          ) : (
-            <button
-              onClick={onConfirm}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all
-                          ${mode === 'restore'
-                            ? 'bg-red-500 text-white hover:bg-red-600'
-                            : 'bg-primary text-primary-foreground shadow-button hover:bg-primary/90'
-                          }`}
-            >
-              {mode === 'restore' ? <RotateCcw size={13} /> : <FolderDown size={13} />}
-              {mode === 'restore' ? 'Looks good — restore' : `Looks good — recover ${result.succeeded} file${result.succeeded !== 1 ? 's' : ''}`}
-            </button>
-          )}
-        </div>
+        ))}
       </div>
-    </div>,
-    document.body,
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-[hsl(var(--line))] shrink-0">
+        {r && r.succeeded === 0 ? (
+          <p className="flex-1 text-xs text-caution flex items-center gap-1.5"><TriangleAlert size={12} />Change the options and try again.</p>
+        ) : <div className="flex-1" />}
+        <Button onClick={onClose}>Back</Button>
+        {r && r.succeeded > 0 && (
+          <Button variant={mode === 'restore' ? 'danger' : 'primary'} icon={mode === 'restore' ? <RotateCcw size={14} /> : <FolderDown size={14} />} onClick={onConfirm} data-autofocus>
+            {mode === 'restore' ? `Replace ${plural(r.succeeded, 'file')}` : `Copy ${plural(r.succeeded, 'file')}`}
+          </Button>
+        )}
+      </div>
+    </Sheet>
   );
 }
 
-
-function ConflictDialog({ conflicts, onOverwrite, onSkip, onCancel }: {
+function ConflictSheet({ open, conflicts, onOverwrite, onSkip, onCancel }: {
+  open: boolean;
   conflicts: string[];
   onOverwrite: () => void;
   onSkip: () => void;
   onCancel: () => void;
 }) {
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
-      <div className="w-full max-w-md mx-4 bg-card border border-border rounded-2xl shadow-overlay p-6 animate-fade-in">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-9 h-9 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
-            <AlertCircle size={16} className="text-amber-400" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground mb-1">Destination conflicts</h2>
-            <p className="text-xs text-muted-foreground/60">
-              {conflicts.length} file{conflicts.length !== 1 ? 's' : ''} already exist at the destination.
-            </p>
-          </div>
-        </div>
-        <div className="max-h-28 overflow-auto bg-foreground/2 rounded-xl border border-foreground/6 p-2.5 mb-4 space-y-0.5">
-          {conflicts.map((p) => <p key={p} className="text-[10px] font-mono text-foreground/40">{p}</p>)}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onCancel} className="flex-1 py-2 rounded-xl border border-foreground/8 text-xs text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-          <button onClick={onSkip} className="flex-1 py-2 rounded-xl border border-foreground/10 bg-foreground/4 text-xs text-foreground/70 hover:bg-foreground/8 transition-colors">Skip existing</button>
-          <button onClick={onOverwrite} className="flex-1 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs text-amber-400 hover:bg-amber-500/22 transition-colors">Overwrite all</button>
-        </div>
+  return (
+    <Sheet open={open} onClose={onCancel} width={460} label="Files already exist">
+      <SheetHeader
+        icon={<TriangleAlert size={18} />}
+        title="Some files are already there"
+        description={`${plural(conflicts.length, 'file')} already ${conflicts.length === 1 ? 'exists' : 'exist'} in the folder you picked.`}
+      />
+      <div className="mx-6 mt-3 max-h-40 overflow-auto rounded-lg bg-surface-sunken shadow-[inset_0_0_0_1px_hsl(var(--line))] p-2.5 space-y-0.5 selectable">
+        {conflicts.map((p) => <p key={p} className="text-xs font-mono text-muted-foreground truncate">{p}</p>)}
       </div>
-    </div>,
-    document.body,
+      <div className="flex justify-end gap-2 px-6 py-5">
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button onClick={onSkip} data-autofocus>Keep existing</Button>
+        <Button variant="danger" onClick={onOverwrite}>Overwrite them</Button>
+      </div>
+    </Sheet>
   );
 }

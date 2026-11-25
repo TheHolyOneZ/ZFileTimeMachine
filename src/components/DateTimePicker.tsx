@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Clock, X } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
+import { Popover } from './ui/Popover';
+import { Button } from './ui/Button';
 
 interface Props {
   value: string;
@@ -8,10 +10,7 @@ interface Props {
 }
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -25,240 +24,133 @@ function parseValue(v: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function formatDisplay(d: Date) {
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-function getFirstDayOfMonth(year: number, month: number) {
-  return new Date(year, month, 1).getDay();
-}
-
-export function DateTimePicker({ value, onChange, placeholder = 'Pick a date & time…' }: Props) {
+export function DateTimePicker({ value, onChange, placeholder = 'Pick a date and time' }: Props) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-
+  const anchorRef = useRef<HTMLDivElement>(null);
   const parsed = parseValue(value);
-  const [viewYear, setViewYear] = useState(() => parsed?.getFullYear() ?? new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState(() => parsed?.getMonth() ?? new Date().getMonth());
-  const [selDay, setSelDay] = useState<number | null>(() => parsed?.getDate() ?? null);
-  const [selYear, setSelYear] = useState<number | null>(() => parsed?.getFullYear() ?? null);
-  const [selMonth, setSelMonth] = useState<number | null>(() => parsed?.getMonth() ?? null);
-  const [hour, setHour] = useState(() => parsed?.getHours() ?? 0);
-  const [minute, setMinute] = useState(() => parsed?.getMinutes() ?? 0);
-
+  const [view, setView] = useState(() => { const d = parsed ?? new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [sel, setSel] = useState<{ y: number; m: number; d: number } | null>(null);
+  const [hour, setHour] = useState(0);
+  const [minute, setMinute] = useState(0);
 
   function openPicker() {
-    const d = parseValue(value) ?? new Date();
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
-    setSelYear(parseValue(value)?.getFullYear() ?? null);
-    setSelMonth(parseValue(value)?.getMonth() ?? null);
-    setSelDay(parseValue(value)?.getDate() ?? null);
-    setHour(parseValue(value)?.getHours() ?? 0);
-    setMinute(parseValue(value)?.getMinutes() ?? 0);
+    const p = parseValue(value);
+    const base = p ?? new Date();
+    setView({ y: base.getFullYear(), m: base.getMonth() });
+    setSel(p ? { y: p.getFullYear(), m: p.getMonth(), d: p.getDate() } : null);
+    setHour(p?.getHours() ?? new Date().getHours());
+    setMinute(p?.getMinutes() ?? 0);
     setOpen(true);
   }
 
-
-  useEffect(() => {
-    if (!open) return;
-    function handler(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-
-  useEffect(() => {
-    if (!open) return;
-    function handler(e: KeyboardEvent) {
-      if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); }
-      if (e.key === 'Enter' && selDay !== null && selMonth !== null && selYear !== null) {
-        e.preventDefault();
-        commit();
-      }
-    }
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-
-  }, [open, selDay, selMonth, selYear, hour, minute]);
-
   function commit() {
-    if (selDay === null || selMonth === null || selYear === null) return;
-    const d = new Date(selYear, selMonth, selDay, hour, minute, 0, 0);
-    onChange(toLocalInputValue(d));
+    if (!sel) return;
+    onChange(toLocalInputValue(new Date(sel.y, sel.m, sel.d, hour, minute, 0, 0)));
     setOpen(false);
   }
 
-  function prevMonth() {
-    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
-    else setViewMonth(m => m - 1);
+  function shiftMonth(delta: number) {
+    setView(({ y, m }) => { const n = m + delta; return { y: y + Math.floor(n / 12), m: ((n % 12) + 12) % 12 }; });
   }
-  function nextMonth() {
-    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
-    else setViewMonth(m => m + 1);
-  }
-
-  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
-  const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
-
 
   const cells = useMemo(() => {
+    const first = new Date(view.y, view.m, 1).getDay();
+    const days = new Date(view.y, view.m + 1, 0).getDate();
     const arr: (number | null)[] = [];
-    for (let i = 0; i < firstDay; i++) arr.push(null);
-    for (let d = 1; d <= daysInMonth; d++) arr.push(d);
+    for (let i = 0; i < first; i++) arr.push(null);
+    for (let d = 1; d <= days; d++) arr.push(d);
     while (arr.length % 7 !== 0) arr.push(null);
     return arr;
-  }, [viewYear, viewMonth, firstDay, daysInMonth]);
+  }, [view]);
 
-  const isSelectedDay = (d: number) =>
-    d === selDay && viewMonth === selMonth && viewYear === selYear;
-
-  const isToday = (d: number) => {
-    const t = new Date();
-    return d === t.getDate() && viewMonth === t.getMonth() && viewYear === t.getFullYear();
-  };
-
-  const displayValue = parsed ? formatDisplay(parsed) : null;
-  const hasSelection = selDay !== null && selMonth !== null && selYear !== null;
+  const today = new Date();
+  const now = Date.now();
 
   return (
-    <div ref={containerRef} className="relative">
-
-      <button
-        onClick={() => open ? setOpen(false) : openPicker()}
-        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left
-                    bg-secondary/60 border transition-all
-                    ${open
-                      ? 'border-primary/40 ring-2 ring-primary/20'
-                      : 'border-border/50 hover:border-border hover:bg-secondary/80'
-                    }`}
+    <div ref={anchorRef}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => (open ? setOpen(false) : openPicker())}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } }}
+        className={`field flex items-center gap-2.5 cursor-default ${open ? '!shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.6),0_0_0_3px_hsl(var(--primary)/0.18)]' : ''}`}
       >
-        <Calendar size={13} className={displayValue ? 'text-primary/60' : 'text-muted-foreground/60'} />
-        <span className={`flex-1 text-[12px] truncate ${displayValue ? 'text-foreground/80' : 'text-muted-foreground/60'}`}>
-          {displayValue ?? placeholder}
+        <Calendar size={14} className={parsed ? 'text-primary' : 'text-faint'} />
+        <span className={`flex-1 text-sm truncate ${parsed ? 'text-foreground' : 'text-faint'}`}>
+          {parsed ? parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : placeholder}
         </span>
-        {displayValue && (
+        {parsed && (
           <button
             onClick={(e) => { e.stopPropagation(); onChange(''); }}
-            className="p-0.5 rounded hover:bg-foreground/10 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+            aria-label="Clear the date"
+            className="w-5 h-5 grid place-items-center rounded-full text-faint hover:text-foreground hover:bg-foreground/[0.08]"
           >
             <X size={11} />
           </button>
         )}
-      </button>
+      </div>
 
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1.5 z-50 w-72 rounded-2xl
-                        bg-card border border-border/60 shadow-overlay
-                        animate-fade-in overflow-hidden">
-
-
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
-            <button
-              onClick={prevMonth}
-              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground/60 hover:text-foreground transition-colors"
-            >
-              <ChevronLeft size={14} />
+      <Popover open={open} onClose={() => setOpen(false)} anchorRef={anchorRef} width={292} estimatedHeight={380}>
+        <div
+          onKeyDown={(e) => { if (e.key === 'Enter' && sel) { e.preventDefault(); commit(); } }}
+          className="select-none"
+        >
+          <div className="flex items-center justify-between px-3 pt-3 pb-1">
+            <button onClick={() => shiftMonth(-1)} aria-label="Previous month" className="press w-7 h-7 grid place-items-center rounded-full text-muted-foreground hover:text-foreground hover:bg-foreground/[0.07]">
+              <ChevronLeft size={15} />
             </button>
-            <span className="text-sm font-semibold text-foreground/90">
-              {MONTHS[viewMonth]} {viewYear}
-            </span>
-            <button
-              onClick={nextMonth}
-              className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground/60 hover:text-foreground transition-colors"
-            >
-              <ChevronRight size={14} />
+            <span className="text-sm font-semibold tabular-nums">{MONTHS[view.m]} {view.y}</span>
+            <button onClick={() => shiftMonth(1)} aria-label="Next month" className="press w-7 h-7 grid place-items-center rounded-full text-muted-foreground hover:text-foreground hover:bg-foreground/[0.07]">
+              <ChevronRight size={15} />
             </button>
           </div>
-
-
-          <div className="grid grid-cols-7 px-3 pt-2.5 pb-1">
-            {DAYS.map((d) => (
-              <div key={d} className="text-center text-[10px] font-medium text-muted-foreground/70 py-1">
-                {d}
-              </div>
-            ))}
+          <div className="grid grid-cols-7 px-3 pt-1">
+            {DAYS.map((d) => <div key={d} className="text-center text-2xs text-faint py-1">{d}</div>)}
           </div>
-
-
-          <div className="grid grid-cols-7 px-3 pb-2">
-            {cells.map((day, i) => (
-              <div key={i} className="flex items-center justify-center p-0.5">
-                {day !== null ? (
+          <div className="grid grid-cols-7 px-3 pb-2 gap-y-0.5">
+            {cells.map((day, i) => {
+              if (day === null) return <div key={i} />;
+              const selected = sel?.y === view.y && sel.m === view.m && sel.d === day;
+              const isToday = day === today.getDate() && view.m === today.getMonth() && view.y === today.getFullYear();
+              const future = new Date(view.y, view.m, day).getTime() > now;
+              return (
+                <div key={i} className="grid place-items-center">
                   <button
-                    onClick={() => { setSelDay(day); setSelYear(viewYear); setSelMonth(viewMonth); }}
-                    className={`w-8 h-8 rounded-xl text-[12px] font-medium transition-all
-                                ${isSelectedDay(day)
-                                  ? 'bg-primary text-primary-foreground shadow-button'
-                                  : isToday(day)
-                                    ? 'text-primary border border-primary/30 hover:bg-primary/15'
-                                    : 'text-foreground/60 hover:bg-secondary hover:text-foreground'
-                                }`}
+                    onClick={() => setSel({ y: view.y, m: view.m, d: day })}
+                    className={`press w-8 h-8 rounded-full text-xs tabular-nums transition-colors duration-150
+                                ${selected ? 'bg-primary text-primary-foreground font-semibold'
+                                  : isToday ? 'text-primary font-semibold hover:bg-primary/10'
+                                  : future ? 'text-faint hover:bg-foreground/[0.06]'
+                                  : 'text-foreground/85 hover:bg-foreground/[0.07]'}`}
                   >
                     {day}
                   </button>
-                ) : null}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
-
-
-          <div className="flex items-center gap-3 px-4 py-3 border-t border-border/30 bg-secondary/10">
-            <Clock size={13} className="text-muted-foreground/70 shrink-0" />
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2 px-4 py-3 border-t border-[hsl(var(--line))]">
+            <span className="text-xs text-muted-foreground">Time</span>
+            <div className="flex items-center gap-1 ml-auto">
               <input
-                type="number" min={0} max={23} value={pad(hour)}
+                type="number" min={0} max={23} value={pad(hour)} aria-label="Hour"
                 onChange={(e) => setHour(Math.min(23, Math.max(0, parseInt(e.target.value) || 0)))}
-                className="w-12 text-center px-1.5 py-1.5 rounded-lg bg-secondary/60 border border-border/50
-                           text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                className="field !h-8 !w-12 !px-1 text-center font-mono tabular-nums"
               />
-              <span className="text-muted-foreground/70 font-mono font-bold">:</span>
+              <span className="text-faint font-mono">:</span>
               <input
-                type="number" min={0} max={59} value={pad(minute)}
+                type="number" min={0} max={59} value={pad(minute)} aria-label="Minute"
                 onChange={(e) => setMinute(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
-                className="w-12 text-center px-1.5 py-1.5 rounded-lg bg-secondary/60 border border-border/50
-                           text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                className="field !h-8 !w-12 !px-1 text-center font-mono tabular-nums"
               />
             </div>
-            <span className="text-[10px] text-muted-foreground/60 ml-auto">HH : MM</span>
           </div>
-
-
-          <div className="flex items-center gap-2 px-4 py-3 border-t border-border/30">
-            {hasSelection && (
-              <span className="text-[11px] text-muted-foreground/50 font-mono flex-1 truncate">
-                {MONTHS[selMonth!].slice(0, 3)} {selDay}, {selYear} {pad(hour)}:{pad(minute)}
-              </span>
-            )}
-            <div className="flex gap-2 ml-auto">
-              <button
-                onClick={() => setOpen(false)}
-                className="px-3 py-1.5 rounded-lg border border-border/50 text-xs text-muted-foreground/60 hover:text-foreground hover:bg-secondary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={commit}
-                disabled={!hasSelection}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium
-                           bg-primary text-primary-foreground shadow-button hover:bg-primary/90
-                           disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-              >
-                Apply
-              </button>
-            </div>
+          <div className="flex items-center justify-end gap-2 px-4 pb-4">
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" variant="primary" onClick={commit} disabled={!sel}>Use this time</Button>
           </div>
         </div>
-      )}
+      </Popover>
     </div>
   );
 }

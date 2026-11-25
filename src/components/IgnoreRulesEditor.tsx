@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { X, Plus } from 'lucide-react';
+import { Button } from './ui/Button';
+import { gsap, dur } from '@/lib/motion';
 
 interface Props {
   globs: string[];
@@ -8,73 +10,62 @@ interface Props {
 
 export function IgnoreRulesEditor({ globs, onChange }: Props) {
   const [input, setInput] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
+  const prev = useRef(globs.length);
+
+  useLayoutEffect(() => {
+    if (globs.length > prev.current && listRef.current?.lastElementChild) {
+      gsap.fromTo(listRef.current.lastElementChild, { autoAlpha: 0, scale: 0.85 }, { autoAlpha: 1, scale: 1, duration: dur(0.35), ease: 'zftm' });
+    }
+    prev.current = globs.length;
+  }, [globs.length]);
 
   function add() {
     const val = input.trim();
-    if (val && !globs.includes(val)) {
-      onChange([...globs, val]);
-    }
+    if (val && !globs.includes(val)) onChange([...globs, val]);
     setInput('');
-  }
-
-  function remove(glob: string) {
-    onChange(globs.filter((g) => g !== glob));
   }
 
   return (
     <div className="space-y-3">
       {globs.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div ref={listRef} className="flex flex-wrap gap-1.5">
           {globs.map((g) => (
-            <span
-              key={g}
-              className="group flex items-center gap-1 text-xs font-mono bg-secondary/60 border border-border
-                         text-foreground/80 px-2 py-1 rounded-md hover:border-border/80 transition-colors"
-            >
+            <span key={g} className="group inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-full text-xs font-mono bg-foreground/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--line))]">
               {g}
               <button
-                onClick={() => remove(g)}
-                className="text-muted-foreground/70 hover:text-destructive transition-colors ml-0.5"
-                title={`Remove ${g}`}
+                onClick={() => onChange(globs.filter((x) => x !== g))}
+                aria-label={`Remove ${g}`}
+                className="w-5 h-5 grid place-items-center rounded-full text-faint hover:text-foreground hover:bg-foreground/[0.1]"
               >
-                <X size={10} />
+                <X size={11} />
               </button>
             </span>
           ))}
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground/50 italic">No ignore rules. All files are tracked.</p>
+        <p className="text-sm text-muted-foreground">No rules yet, so every file is kept.</p>
       )}
 
       <div className="flex gap-2">
         <input
-          type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="e.g. node_modules/ or *.tmp"
-          className="flex-1 bg-secondary/60 border border-border rounded-lg px-3 py-1.5 text-sm font-mono
-                     focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50
-                     placeholder:text-muted-foreground/70 transition-colors"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          placeholder="node_modules/ or *.tmp"
+          spellCheck={false}
+          aria-label="New rule"
+          className="field font-mono text-xs"
         />
-        <button
-          onClick={add}
-          disabled={!input.trim()}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-secondary border border-border
-                     hover:bg-secondary/80 hover:border-border/80 disabled:opacity-40 disabled:cursor-not-allowed
-                     transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Plus size={13} />
-          Add
-        </button>
+        <Button icon={<Plus size={14} />} onClick={add} disabled={!input.trim()}>Add</Button>
       </div>
-      <p className="text-[10px] text-muted-foreground/70 mt-1.5">
-        End a rule with <code className="font-mono bg-secondary/40 px-1 rounded">/</code> to skip a folder and everything in it, at any depth (e.g. <code className="font-mono bg-secondary/40 px-1 rounded">Cache/</code>).
-        Prefix with <code className="font-mono bg-secondary/40 px-1 rounded">!</code> to un-ignore a pattern (e.g. <code className="font-mono bg-secondary/40 px-1 rounded">!important.log</code>)
-      </p>
-      <p className="text-[10px] text-muted-foreground/70">
-        ZFileTimeMachine's own data folder is always skipped, you don't need a rule for it.
-      </p>
+      <div className="text-xs text-faint leading-relaxed space-y-1">
+        <p>
+          End a rule with <code className="font-mono text-muted-foreground">/</code> to skip a folder and everything in it, at any depth, like <code className="font-mono text-muted-foreground">Cache/</code>.
+          Start one with <code className="font-mono text-muted-foreground">!</code> to bring a file back, like <code className="font-mono text-muted-foreground">!important.log</code>.
+        </p>
+        <p>ZFileTimeMachine's own data folder is always skipped, so it needs no rule.</p>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import type {
   Folder,
   FolderConfig,
+  DirEntryInfo,
   FileEntry,
   Snapshot,
   DiffResult,
@@ -29,6 +30,10 @@ export async function getPlatform(): Promise<string> {
 
 export async function listFolders(): Promise<Folder[]> {
   return invoke('list_folders');
+}
+
+export async function listDirectory(root: string, rel: string, globs: string[]): Promise<DirEntryInfo[]> {
+  return invoke('list_directory', { root, rel, globs });
 }
 
 export async function addFolder(path: string, config?: FolderConfig): Promise<Folder> {
@@ -151,6 +156,10 @@ export async function listFilesPaged(
   offset?: number,
 ): Promise<{ items: FileEntry[]; total: number }> {
   return invoke('list_files_paged', { folderId, limit: limit ?? null, offset: offset ?? null });
+}
+
+export async function getSnapshotLineStats(fileId: number): Promise<import('./types').SnapshotLineStats[]> {
+  return invoke('snapshot_line_stats', { fileId });
 }
 
 export async function runQaSuite(): Promise<QaTestResult[]> {

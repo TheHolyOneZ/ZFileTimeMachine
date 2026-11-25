@@ -3,6 +3,59 @@
 All notable changes to ZFileTimeMachine are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-11-25
+
+A redesign of the whole app. Every screen, dialog and menu is new, the folder view is built around a file's history instead of a list, and a few things that were only possible through the config before now have controls. How files are watched and stored is unchanged, so your existing history carries over as it is.
+
+### Added
+
+- **A new icon**, in the app, the taskbar, the installers and on the website. The macOS menu bar gets its own single-color version that follows the light or dark bar.
+- **Sidebar with your folders.** Every watched folder is one click away, with a dot while it's watched and a pause sign when it isn't. The storage meter, Settings and About sit at the bottom. `Ctrl B` / `⌘ B` collapses it, and it narrows by itself in small windows.
+- **Overview.** The folder cards show versions, files and two weeks of activity, and below them the most recent changes across all folders, each linking straight to that file's history.
+- **A new folder view.** A file tree on the left, the selected file's history on the right.
+  - The tree folds and filters, is moved through with the arrow keys, and stays smooth with thousands of files. Right-click a subfolder to pause or resume it.
+  - Versions are grouped by day. Each one shows how many lines it added and removed compared with the version before it, and small icons mark versions saved by hand, on a schedule, or kept before a restore.
+  - The comparison with the file as it is now sits beside the list. Long unchanged stretches are folded so the changes come first, and can be opened with one click. `Ctrl F` searches it.
+  - **Restore this version** opens a short confirmation with the line counts and the "keep the current file first" switch. After restoring, the **Current** marker travels down the history to the restored version.
+- **Choose what to watch, file by file.** Adding a folder, in the welcome guide or later, shows its contents as a tree with sizes. Untick any folder or file you don't want versions of, or tick a single file inside a folder you skipped. The same tree is in the folder's settings under **What to watch**, with the full rule list below it.
+- **Themes.** Seven themes (Graphite, Midnight, Obsidian, Slate, Forest, Mocha, Plum), each for dark and light, plus a mode that follows your system. Pick one of ten accent colors or any color of your own, and choose how round the corners are, from sharp to round. Text on colored buttons turns dark or light by itself, so it stays readable.
+- **Folder icon colors.** A folder's icon follows the accent color unless you give the folder its own: one of nine colors or any color you pick. A switch in Settings under Appearance makes every folder use the accent color. In light mode the colors are darker, so icons are easier to see. The Code preset uses the accent color instead of a fixed blue.
+- **Always show the whole file** (off by default). Shows every line of a version, also when nothing changed, instead of only the changes. Switch it next to a comparison or in Settings under Appearance.
+- **Click a path to copy it.** Folder and file paths in the headers copy with one click. Before, they were part of the window's drag area and couldn't be selected.
+- **Image previews.** For pictures (PNG, JPEG, GIF, WebP, AVIF, BMP, ICO, SVG) a version is shown next to the file as it is now.
+- **Search finds files.** `Ctrl K` / `⌘ K` now searches the files of every watched folder too, and opens the match in its folder.
+- **When versions are saved** can be chosen per folder: every save, every save plus a check on a schedule, or only by hand.
+- **How long versions are kept** can be a number of versions, a number of days, or both. Before, only the number of versions could be changed.
+- **Unsaved changes bar** in Settings, with Revert and Save (`Ctrl S` / `⌘ S`).
+- **Native window material.** The sidebar is translucent on macOS and uses Mica on Windows 11. Windows 10 and Linux keep a solid window.
+- Dropping a folder on the window works from every screen, not only the folder list, and lets you choose what to watch first.
+- Switching between dark and light spreads out from where you clicked.
+
+### Changed
+
+- **Closing the window keeps the app running in the tray by default**, so folders stay protected. Settings has a clear choice between that and quitting. If you saved your settings in an earlier version, your choice is kept.
+- Starting the app while it's already running brings its window back instead of starting a second copy. Two copies would both have watched the same folders.
+- The app says "version" and "restore" instead of "snapshot" and "rewind".
+- Dialogs open and close with a soft scale and blur, menus grow from the cursor, notifications slide up from the bottom, and highlights glide between items. With reduced motion turned on in your system, all of that is skipped.
+- Settings are grouped into short lists with a section list on the left. **Storage** in the sidebar opens the storage settings directly.
+- Making a folder keep fewer versions now asks in the app's own dialog instead of a browser popup, and also covers a shorter number of days.
+- The Recover screen keeps all its options, laid out as "Where the files go" and "Which version", and its preview, confirmation and conflict dialogs are rebuilt.
+- The welcome guide is one window whose content slides between steps. It adds the folder only after you chose what to watch. Before, the first scan had already saved everything by the time it asked what to skip.
+- Notifications about deleted and renamed files only appear while that folder is open.
+- Folders set to the "Interval" mode are labelled "Saves and every N min". In this mode the app has always also saved on every change, and the old label suggested it didn't.
+
+### Fixed
+
+- **The keyboard shortcut list** named shortcuts that never existed (`Space` and `Shift + Click` in the recovery tree). The list in the app and in the README now matches what works.
+- **The Recover tree changed its own state while drawing** when you typed in its filter, which made React render it twice. It now updates after drawing.
+
+### Under the hood
+
+- New commands for the per-version line counts and the window material, and a `zftm-snapshot` protocol that streams a version's image to the preview without going through the JavaScript bridge. Images over 40 MB aren't previewed.
+- A new command lists a folder's contents for the tree. It can't leave the folder and stops adding up sizes in very large ones.
+- GSAP is a new frontend dependency, and Tauri's single-instance plugin a new backend one.
+- Tests for the line counts, the image protocol and the folder listing.
+
 ## [0.2.1] — 2026-11-25
 
 A fix release for [#2](https://github.com/TheHolyOneZ/ZFileTimeMachine/issues/2). Watching a folder that contains ZFileTimeMachine's own data folder (for example `~/Library/Application Support` on macOS) made the app snapshot its own snapshots, endlessly. Looking into it turned up two more bugs, in ignore rules and in pausing subfolders.

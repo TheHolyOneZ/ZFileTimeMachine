@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
-import { ChevronRight, FileText, Folder as FolderIcon, FolderOpen, Pin } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronRight, Pin } from 'lucide-react';
 import type { FileEntry } from '@/lib/types';
 import { TristateCheckbox, type CheckState } from './TristateCheckbox';
+import { FileIcon, DirIcon } from './ui/FileIcon';
 
 interface Props {
   files: FileEntry[];
@@ -32,7 +33,7 @@ function buildTree(files: FileEntry[], filter: string): TreeNode {
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
       const childPath = parts.slice(0, i + 1).join('/');
-      let child = node.children.find((c) => c.name === part);
+      let child = node.children.find((c) => c.name === part && !c.file);
       if (!child) { child = { name: part, path: childPath, children: [] }; node.children.push(child); }
       node = child;
     }
@@ -40,7 +41,7 @@ function buildTree(files: FileEntry[], filter: string): TreeNode {
   }
   function sortNode(n: TreeNode) {
     n.children.sort((a, b) => {
-      const aD = a.children.length > 0, bD = b.children.length > 0;
+      const aD = !a.file, bD = !b.file;
       if (aD !== bD) return aD ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
@@ -68,8 +69,7 @@ function buildDirIndex(files: FileEntry[], selected: Set<string>, filter: string
 
 function dirState(prefix: string, idx: Map<string, { total: number; sel: number }>): CheckState {
   const e = idx.get(prefix);
-  if (!e || e.total === 0) return 'unchecked';
-  if (e.sel === 0) return 'unchecked';
+  if (!e || e.total === 0 || e.sel === 0) return 'unchecked';
   if (e.sel === e.total) return 'checked';
   return 'indeterminate';
 }
@@ -88,7 +88,8 @@ interface NodeRowProps {
   onSelectFile: (p: string) => void;
 }
 
-function NodeRow({ node, depth, selected, expanded, dirIdx, selectedFile, fileSnapshotOverrides, onToggleFile, onToggleDir, onToggleExpand, onSelectFile }: NodeRowProps) {
+function NodeRow(props: NodeRowProps) {
+  const { node, depth, selected, expanded, dirIdx, selectedFile, fileSnapshotOverrides, onToggleFile, onToggleDir, onToggleExpand, onSelectFile } = props;
   const isDir = !node.file;
   const isExpanded = expanded.has(node.path);
   const isActiveFile = !isDir && selectedFile === node.path;
@@ -99,65 +100,43 @@ function NodeRow({ node, depth, selected, expanded, dirIdx, selectedFile, fileSn
   return (
     <>
       <div
-        className={`group flex items-center gap-2 py-[5px] rounded-lg cursor-pointer select-none transition-all duration-100
-                    ${isActiveFile
-                      ? 'bg-primary/10 border border-primary/20'
-                      : isSelected && !isDir
-                        ? 'bg-primary/5 border border-transparent hover:bg-primary/8'
-                        : 'border border-transparent hover:bg-foreground/4'
-                    }`}
-        style={{ paddingLeft: `${10 + depth * 18}px`, paddingRight: '8px' }}
+        role="treeitem"
+        aria-expanded={isDir ? isExpanded : undefined}
+        aria-selected={isActiveFile}
+        className={`group flex items-center gap-2 h-[30px] rounded-[calc(8px*var(--rs))] cursor-default select-none
+                    ${isActiveFile ? 'bg-primary/[0.13] shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.22)]' : 'hover:bg-foreground/[0.045]'}`}
+        style={{ paddingLeft: `${8 + depth * 16}px`, paddingRight: 8 }}
         onClick={() => isDir ? onToggleExpand(node.path) : onSelectFile(node.path)}
       >
-
         <TristateCheckbox
           state={checkState}
           onToggle={() => isDir ? onToggleDir(node.path) : onToggleFile(node.path)}
-          size={13}
+          label={`Select ${node.name}`}
         />
-
-
         {isDir ? (
           <>
-            <ChevronRight size={11} className={`text-muted-foreground/70 shrink-0 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`} />
-            {isExpanded
-              ? <FolderOpen size={13} className="text-primary/70 shrink-0" />
-              : <FolderIcon size={13} className="text-muted-foreground/70 shrink-0" />
-            }
+            <ChevronRight size={13} className={`text-faint shrink-0 transition-transform duration-300 ease-zftm ${isExpanded ? 'rotate-90' : ''}`} />
+            <DirIcon open={isExpanded} size={15} className="text-muted-foreground" />
           </>
         ) : (
-          <FileText size={12} className={`shrink-0 ml-[15px] transition-colors ${isActiveFile ? 'text-primary/70' : isSelected ? 'text-primary/40' : 'text-muted-foreground/60'}`} />
+          <FileIcon path={node.path} binary={node.file?.isBinary} size={15} className={`ml-[19px] ${isActiveFile ? 'text-primary' : 'text-muted-foreground'}`} />
         )}
-
-
-        <span className={`text-[12px] truncate flex-1 min-w-0 transition-colors
-                          ${isActiveFile ? 'text-primary font-medium' : isSelected && !isDir ? 'text-foreground/90' : 'text-foreground/65'}`}>
+        <span className={`text-sm truncate flex-1 min-w-0 ${isActiveFile ? 'text-foreground font-medium' : isSelected || isDir ? 'text-foreground/90' : 'text-foreground/75'}`}>
           {node.name}
         </span>
-
-
         {node.file && (
-          <div className="flex items-center gap-2 shrink-0">
+          <span className="flex items-center gap-2 shrink-0">
             {isPinned && (
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-400/15 border border-amber-400/25">
-                <Pin size={8} className="text-amber-400 fill-amber-400/60" />
-                <span className="text-[9px] text-amber-400/80 font-medium">pinned</span>
-              </div>
+              <span className="inline-flex items-center gap-1 h-5 px-1.5 rounded-[calc(5px*var(--rs))] bg-primary/12 text-primary text-2xs font-medium" data-tip="This file uses the version you picked">
+                <Pin size={10} />Pinned
+              </span>
             )}
-            <span className={`text-[10px] font-mono transition-opacity ${isActiveFile || isSelected ? 'opacity-60' : 'opacity-0 group-hover:opacity-40'} text-muted-foreground`}>
-              {node.file.snapshotCount > 0 ? `${node.file.snapshotCount}v` : ''}
-            </span>
-          </div>
+            <span className="text-2xs tabular-nums text-faint">{node.file.snapshotCount > 0 ? node.file.snapshotCount : ''}</span>
+          </span>
         )}
       </div>
-
       {isDir && isExpanded && node.children.map((child) => (
-        <NodeRow key={child.path} node={child} depth={depth + 1}
-          selected={selected} expanded={expanded} dirIdx={dirIdx}
-          selectedFile={selectedFile} fileSnapshotOverrides={fileSnapshotOverrides}
-          onToggleFile={onToggleFile} onToggleDir={onToggleDir}
-          onToggleExpand={onToggleExpand} onSelectFile={onSelectFile}
-        />
+        <NodeRow key={child.path} {...props} node={child} depth={depth + 1} />
       ))}
     </>
   );
@@ -177,29 +156,29 @@ export function RecoverTree({ files, selected, onToggleFile, onToggleDir, filter
     setExpanded((prev) => { const next = new Set(prev); if (next.has(path)) next.delete(path); else next.add(path); return next; });
   }
 
-  useMemo(() => {
+  useEffect(() => {
     if (!filter) return;
-    const next = new Set(expanded);
-    for (const f of files) {
-      if (!f.relPath.toLowerCase().includes(filter.toLowerCase())) continue;
-      const parts = f.relPath.split('/');
-      for (let i = 1; i < parts.length; i++) next.add(parts.slice(0, i).join('/'));
-    }
-    setExpanded(next);
-
-  }, [filter]);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const f of files) {
+        if (!f.relPath.toLowerCase().includes(filter.toLowerCase())) continue;
+        const parts = f.relPath.split('/');
+        for (let i = 1; i < parts.length; i++) next.add(parts.slice(0, i).join('/'));
+      }
+      return next;
+    });
+  }, [filter, files]);
 
   if (tree.children.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-32 gap-2 text-xs text-muted-foreground/60">
-        <FolderIcon size={24} className="opacity-20" />
-        {filter ? 'No files match.' : 'No files in this folder.'}
-      </div>
+      <p className="text-sm text-muted-foreground text-center py-10">
+        {filter ? <>No files match “{filter}”.</> : 'There are no files in this folder yet.'}
+      </p>
     );
   }
 
   return (
-    <div className="space-y-0.5">
+    <div role="tree" aria-label="Files to recover" aria-multiselectable>
       {tree.children.map((node) => (
         <NodeRow key={node.path} node={node} depth={0}
           selected={selected} expanded={expanded} dirIdx={dirIdx}

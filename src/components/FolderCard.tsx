@@ -1,60 +1,94 @@
-import { useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Trash2, Loader2, FolderOpen, Settings2, PauseCircle, PlayCircle,
-  History, ChevronRight,
-} from 'lucide-react';
+import { Trash2, FolderOpen, Settings2, Pause, Play, History } from 'lucide-react';
 import { FolderIcon } from './FolderIcon';
-import { formatDistanceToNow } from 'date-fns';
-import type { Folder } from '@/lib/types';
+import type { ActivityEntry, FileEntry, Folder } from '@/lib/types';
 import { useRemoveFolder, useToggleFolderPause, useUndeleteFolder } from '@/hooks/useFolders';
-import { getColor } from '@/lib/folderAppearance';
+import { folderTint } from '@/lib/folderAppearance';
 import { formatPath } from '@/lib/tauri';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { ContextMenu } from './ContextMenu';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useToast } from '@/context/ToastContext';
+import { gsap, dur } from '@/lib/motion';
 
 interface Props {
   folder: Folder;
+  files?: FileEntry[];
+  activity?: ActivityEntry[];
 }
 
-function triggerLabel(folder: Folder): string {
+export function triggerLabel(folder: Folder): string {
   const t = folder.config.trigger;
-  if (t.type === 'OnChange')  return 'On save';
-  if (t.type === 'Manual')    return 'Manual';
-  if (t.type === 'Interval')  return `Every ${t.minutes} min`;
-  if (t.type === 'Hybrid')    return 'Hybrid';
-  return 'Unknown';
-}
-
-function retentionLabel(folder: Folder): string {
-  const r = folder.config.retention;
-  if (r.type === 'KeepLast')   return `Keeps last ${r.count}`;
-  if (r.type === 'TimeBased')  return `Keeps ${r.days} days`;
-  if (r.type === 'Hybrid')     return `Keeps ${r.days} days / ${r.count}`;
+  if (t.type === 'OnChange') return 'Every save';
+  if (t.type === 'Manual') return 'Only by hand';
+  if (t.type === 'Interval') return `Saves and every ${t.minutes} min`;
+  if (t.type === 'Hybrid') return `Saves and every ${t.interval_minutes} min`;
   return '';
 }
 
-export function FolderCard({ folder }: Props) {
+export function retentionLabel(folder: Folder): string {
+  const r = folder.config.retention;
+  if (r.type === 'KeepLast') return `Last ${r.count} versions`;
+  if (r.type === 'TimeBased') return `${r.days} days of history`;
+  if (r.type === 'Hybrid') return `${r.days} days, up to ${r.count}`;
+  return '';
+}
+
+const DAYS = 14;
+
+function Sparkline({ activity }: { activity?: ActivityEntry[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const bars = useMemo(() => {
+    const counts = new Array(DAYS).fill(0);
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+    for (const a of activity ?? []) {
+      if (a.action !== 'snapshot_created') continue;
+      const daysAgo = Math.floor((startOfToday.getTime() - a.timestamp) / 86_400_000) + 1;
+      const idx = a.timestamp >= startOfToday.getTime() ? DAYS - 1 : DAYS - 1 - daysAgo;
+      if (idx >= 0 && idx < DAYS) counts[idx]++;
+    }
+    const max = Math.max(1, ...counts);
+    return counts.map((c) => c / max);
+  }, [activity]);
+  const total = (activity ?? []).filter((a) => a.action === 'snapshot_created').length;
+
+  useLayoutEffect(() => {
+    if (!ref.current || activity == null) return;
+    gsap.fromTo(ref.current.children, { scaleY: 0 }, { scaleY: 1, duration: dur(0.7), stagger: 0.025, ease: 'zftm', transformOrigin: '50% 100%' });
+  }, [activity == null]);
+
+  return (
+    <div className="flex items-end gap-[3px] h-7" ref={ref} aria-label={`${total} recent versions over the last two weeks`} role="img">
+      {bars.map((v, i) => (
+        <span
+          key={i}
+          className={`w-[5px] rounded-[calc(2px*var(--rs))] ${i === DAYS - 1 ? 'bg-foreground/55' : v > 0 ? 'bg-foreground/25' : 'bg-foreground/[0.08]'}`}
+          style={{ height: `${Math.max(12, v * 100)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function FolderCard({ folder, files, activity }: Props) {
   const navigate = useNavigate();
   const remove = useRemoveFolder();
   const togglePause = useToggleFolderPause();
   const undelete = useUndeleteFolder();
   const { menu, open, close } = useContextMenu();
   const { toast } = useToast();
-
-  const ago = formatDistanceToNow(new Date(folder.createdAt), { addSuffix: true });
-  const isRemoving = remove.isPending && remove.variables === folder.id;
-  const colorDef = getColor(folder.config.color);
-  const isPaused = folder.paused;
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const isPaused = folder.paused;
+  const isRemoving = remove.isPending && remove.variables === folder.id;
+  const fileCount = files?.length;
+  const versionCount = files?.reduce((s, f) => s + f.snapshotCount, 0);
 
   function doRemove() {
     setConfirmRemove(false);
     remove.mutate(folder.id, {
       onSuccess: () => {
-        toast('info', `"${folder.displayName}" removed.`, {
+        toast('info', `Stopped watching ${folder.displayName}.`, {
           action: { label: 'Undo', onClick: () => undelete.mutate(folder.id) },
           duration: 8000,
         });
@@ -62,150 +96,87 @@ export function FolderCard({ folder }: Props) {
     });
   }
 
-  function handleRemove(e: React.MouseEvent) {
-    e.stopPropagation();
-    setConfirmRemove(true);
+  function openFolder() {
+    if (!isRemoving) navigate(`/folder/${folder.id}`);
   }
 
   return (
     <>
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => !isRemoving && navigate(`/folder/${folder.id}`)}
-      onKeyDown={(e) => e.key === 'Enter' && !isRemoving && navigate(`/folder/${folder.id}`)}
-      onContextMenu={(e) => open(e, [
-        { label: 'Open folder', icon: <FolderOpen size={12} />, onClick: () => navigate(`/folder/${folder.id}`) },
-        { label: 'Recover files', icon: <History size={12} />, onClick: () => navigate(`/folder/${folder.id}/recover`) },
-        { label: 'Folder settings', icon: <Settings2 size={12} />, onClick: () => navigate(`/folder/${folder.id}/settings`) },
-        {
-          label: isPaused ? 'Resume watching' : 'Pause watching',
-          icon: isPaused ? <PlayCircle size={12} /> : <PauseCircle size={12} />,
-          onClick: () => togglePause.mutate({ id: folder.id, paused: !isPaused }),
-        },
-        { label: 'Remove folder', icon: <Trash2 size={12} />, variant: 'destructive', separator: true, onClick: () => setConfirmRemove(true) },
-      ])}
-      className={`group relative flex items-stretch rounded-xl border bg-card shadow-card
-                  cursor-pointer select-none overflow-hidden
-                  transition-[box-shadow,border-color,background-color] duration-200
-                  border-border/70 hover:border-foreground/[0.12] hover:shadow-card-hover
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-                  ${isRemoving ? 'opacity-40 pointer-events-none' : ''}`}
-    >
-
-      <div className="flex-1 flex items-center gap-4 px-4 py-4 min-w-0">
-
-
-        <div className="relative shrink-0">
-          <div className={`w-11 h-11 rounded-xl ${colorDef.bgClass} ring-1 ring-inset ring-foreground/[0.06] flex items-center justify-center`}>
-            <FolderIcon name={folder.config.icon} size={20} className={colorDef.iconClass} />
+      <div
+        role="link"
+        tabIndex={0}
+        aria-label={`Open ${folder.displayName}`}
+        onClick={openFolder}
+        onKeyDown={(e) => e.key === 'Enter' && openFolder()}
+        onContextMenu={(e) => open(e, [
+          { label: 'Open', icon: <FolderOpen size={14} />, onClick: openFolder },
+          { label: 'Recover files', icon: <History size={14} />, onClick: () => navigate(`/folder/${folder.id}/recover`) },
+          { label: 'Folder settings', icon: <Settings2 size={14} />, onClick: () => navigate(`/folder/${folder.id}/settings`) },
+          {
+            label: isPaused ? 'Resume watching' : 'Pause watching',
+            icon: isPaused ? <Play size={14} /> : <Pause size={14} />,
+            onClick: () => togglePause.mutate({ id: folder.id, paused: !isPaused }),
+            separator: true,
+          },
+          { label: 'Stop watching', icon: <Trash2 size={14} />, variant: 'destructive', onClick: () => setConfirmRemove(true) },
+        ])}
+        className={`group relative flex flex-col gap-4 p-4 rounded-xl bg-card shadow-card cursor-pointer
+                    transition-[transform,box-shadow] duration-300 ease-zftm
+                    hover:-translate-y-0.5 hover:shadow-card-hover
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70
+                    ${isRemoving ? 'opacity-40 pointer-events-none' : ''}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-[calc(11px*var(--rs))] bg-foreground/[0.055] shadow-[inset_0_0_0_1px_hsl(var(--line))] grid place-items-center shrink-0">
+            <FolderIcon name={folder.config.icon} size={19} {...folderTint(folder.config.color)} />
           </div>
-          <span
-            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card
-                        ${isPaused ? 'bg-amber-400' : 'bg-emerald-500'}`}
-            title={isPaused ? 'Watcher paused' : 'Watcher active'}
-          />
-        </div>
-
-
-        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-semibold text-[15px] text-foreground truncate leading-tight">
-              {folder.displayName}
-            </span>
-            {isPaused && (
-              <span className="shrink-0 text-[11px] px-1.5 rounded font-medium bg-amber-500/10 text-amber-400">
-                Paused
-              </span>
-            )}
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-md font-semibold text-foreground truncate">{folder.displayName}</span>
+            </div>
+            <p className="text-xs text-faint font-mono truncate mt-0.5" title={folder.path}>{formatPath(folder.path)}</p>
           </div>
-
-
-          <span className="text-xs text-muted-foreground/80 font-mono truncate leading-none" title={folder.path}>
-            {formatPath(folder.path)}
+          <span className={`shrink-0 inline-flex items-center gap-1.5 h-6 px-2 rounded-full text-2xs font-medium
+                            ${isPaused ? 'bg-foreground/[0.06] text-muted-foreground' : 'bg-positive/10 text-positive'}`}>
+            {isPaused ? <Pause size={10} /> : <span className="live-dot w-1.5 h-1.5 rounded-full bg-positive" />}
+            {isPaused ? 'Paused' : 'Watching'}
           </span>
-
-
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>{triggerLabel(folder)}</span>
-            <span aria-hidden className="text-muted-foreground/40">·</span>
-            <span>{retentionLabel(folder)}</span>
-            <span aria-hidden className="text-muted-foreground/40">·</span>
-            <span>Added {ago}</span>
-          </div>
         </div>
 
+        <div className="flex items-end justify-between gap-4">
+          <div className="flex gap-6">
+            <div>
+              <p className="text-xl font-semibold tabular-nums leading-none text-foreground">
+                {versionCount != null ? versionCount.toLocaleString() : <span className="skeleton inline-block w-8 h-5 align-middle" />}
+              </p>
+              <p className="text-2xs text-muted-foreground mt-1.5">versions</p>
+            </div>
+            <div>
+              <p className="text-xl font-semibold tabular-nums leading-none text-foreground/80">
+                {fileCount != null ? fileCount.toLocaleString() : <span className="skeleton inline-block w-6 h-5 align-middle" />}
+              </p>
+              <p className="text-2xs text-muted-foreground mt-1.5">files</p>
+            </div>
+          </div>
+          <Sparkline activity={activity} />
+        </div>
 
-        <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); navigate(`/folder/${folder.id}/recover`); }}
-            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground hover:text-primary hover:bg-primary/10
-                       transition-all"
-            title="Recover files"
-          >
-            <History size={14} />
-          </button>
-
-          <button
-            onClick={(e) => { e.stopPropagation(); navigate(`/folder/${folder.id}/settings`); }}
-            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground hover:text-foreground hover:bg-secondary/60
-                       transition-all"
-            title="Folder settings"
-          >
-            <Settings2 size={14} />
-          </button>
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePause.mutate({ id: folder.id, paused: !isPaused });
-            }}
-            disabled={togglePause.isPending}
-            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10
-                       disabled:opacity-30 transition-all"
-            title={isPaused ? 'Resume watching' : 'Pause watching'}
-          >
-            {isPaused ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-          </button>
-
-          <button
-            onClick={handleRemove}
-            disabled={remove.isPending}
-            className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 p-1.5 rounded-lg
-                       text-muted-foreground hover:text-destructive hover:bg-destructive/10
-                       disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            title="Remove folder"
-          >
-            {isRemoving ? (
-              <Loader2 size={14} className="animate-spin-slow" />
-            ) : (
-              <Trash2 size={14} />
-            )}
-          </button>
-
-          <ChevronRight
-            size={14}
-            className="text-muted-foreground/50 group-hover:text-muted-foreground/50 group-hover:translate-x-0.5 transition-all ml-1"
-          />
+        <div className="flex items-center justify-between gap-3 pt-3 -mb-0.5 border-t border-[hsl(var(--line))] text-2xs text-muted-foreground">
+          <span className="truncate">{triggerLabel(folder)}</span>
+          <span className="truncate text-faint">{retentionLabel(folder)}</span>
         </div>
       </div>
-    </div>
-    {menu && <ContextMenu {...menu} onClose={close} />}
-    {confirmRemove && (
+      {menu && <ContextMenu {...menu} onClose={close} />}
       <ConfirmDialog
-        title={`Stop watching "${folder.displayName}"?`}
+        open={confirmRemove}
+        title={`Stop watching ${folder.displayName}?`}
         confirmLabel="Stop watching"
         destructive
         onConfirm={doRemove}
         onCancel={() => setConfirmRemove(false)}
       >
-        Its history is kept for 7 days, so you can undo this.
+        Your files stay where they are. The history is kept for 7 days, so you can undo this.
       </ConfirmDialog>
-    )}
     </>
   );
 }

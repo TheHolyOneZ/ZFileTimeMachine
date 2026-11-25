@@ -45,6 +45,24 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|a| a == "--hidden") {
+                return;
+            }
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+                let _ = win.unminimize();
+                let _ = win.set_focus();
+            }
+        }))
+        .register_asynchronous_uri_scheme_protocol("zftm-snapshot", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            let path = request.uri().path().to_string();
+            std::thread::spawn(move || {
+                let state = app.try_state::<AppState>();
+                responder.respond(commands::snapshots::snapshot_image_response(state.as_deref(), &path));
+            });
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -88,7 +106,7 @@ pub fn run() {
                 .flatten()
                 .and_then(|j| serde_json::from_str::<config::GlobalSettings>(&j).ok())
                 .map(|s| s.close_to_tray)
-                .unwrap_or(false);
+                .unwrap_or(true);
 
             let close_to_tray = Arc::new(Mutex::new(initial_close_to_tray));
 
@@ -172,6 +190,13 @@ pub fn run() {
                     }
                 });
 
+            #[cfg(target_os = "macos")]
+            {
+                tray_builder = tray_builder
+                    .icon(tauri::include_image!("./icons/tray-template.png"))
+                    .icon_as_template(true);
+            }
+            #[cfg(not(target_os = "macos"))]
             if let Some(icon) = app.default_window_icon() {
                 tray_builder = tray_builder.icon(icon.clone());
             }
@@ -181,6 +206,11 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.set_shadow(windows_version::OsVersion::current().build >= 22000);
+            }
+
+            if let Some(win) = app.get_webview_window("main") {
+                let material = commands::appearance::apply_window_material(&win);
+                tracing::info!("Window material: {material}");
             }
 
             if std::env::args().any(|a| a == "--hidden") {
@@ -197,8 +227,8 @@ pub fn run() {
                 let should_hide = window
                     .app_handle()
                     .try_state::<AppState>()
-                    .map(|s| s.close_to_tray.lock().map(|g| *g).unwrap_or(false))
-                    .unwrap_or(false);
+                    .map(|s| s.close_to_tray.lock().map(|g| *g).unwrap_or(true))
+                    .unwrap_or(true);
                 if should_hide {
                     api.prevent_close();
                     let _ = window.hide();
@@ -228,6 +258,10 @@ pub fn run() {
             commands::snapshots::list_activity_log,
             commands::snapshots::run_integrity_check,
             commands::snapshots::get_storage_breakdown,
+            commands::snapshots::snapshot_line_stats,
+            commands::appearance::get_window_material,
+            commands::browse::list_directory,
+            commands::appearance::set_window_theme,
             commands::recover::bulk_recover,
             commands::recover::open_path,
             commands::rewind::preview_diff,

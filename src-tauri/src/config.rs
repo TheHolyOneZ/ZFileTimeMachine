@@ -5,7 +5,7 @@ pub struct GlobalSettings {
     pub global_size_cap_mb: Option<u64>,
     pub log_level: String,
 
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub close_to_tray: bool,
 
 
@@ -13,12 +13,16 @@ pub struct GlobalSettings {
     pub start_on_boot: bool,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
             global_size_cap_mb: None,
             log_level: "info".to_string(),
-            close_to_tray: false,
+            close_to_tray: true,
             start_on_boot: false,
         }
     }
